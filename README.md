@@ -60,15 +60,18 @@ The repo includes [ap_upload_inbox.py](/Users/davidnarayan/Documents/Playground/
 Run locally:
 
 ```bash
-export AP_UPLOAD_TOKEN='shared-upload-token'
+export AP_UPLOAD_TOKEN='machine-download-token'
+export AP_ADMIN_USERNAME='apadmin'
+export AP_ADMIN_PASSWORD='strong-password'
+export AP_SESSION_SECRET='long-random-session-secret'
 python3 ap_upload_inbox.py
 ```
 
-Then open `http://localhost:10000`, upload the latest CSV, and use:
+Then open `http://localhost:10000`, sign in, upload the latest CSV, and use:
 
 ```bash
 export AP_TRANSACTIONS_URL='http://localhost:10000/latest.csv'
-export AP_TRANSACTIONS_AUTH_TOKEN='shared-upload-token'
+export AP_TRANSACTIONS_AUTH_TOKEN='machine-download-token'
 ```
 
 The service stores:
@@ -87,10 +90,13 @@ Recommended Render env wiring:
 
 - web service `anata-ops-ap-inbox`
   - `AP_UPLOAD_TOKEN`
+  - `AP_ADMIN_USERNAME`
+  - `AP_ADMIN_PASSWORD`
+  - `AP_SESSION_SECRET`
   - `AP_UPLOAD_STORAGE_DIR=/var/data/ap_upload_inbox`
 - cron services `anata-ops-ap-daily` and `anata-ops-ap-weekly`
   - `AP_TRANSACTIONS_URL=https://anata-ops-ap-inbox.onrender.com/latest.csv`
-  - `AP_TRANSACTIONS_AUTH_TOKEN=<same token as AP_UPLOAD_TOKEN>`
+  - `AP_TRANSACTIONS_AUTH_TOKEN=<same value as AP_UPLOAD_TOKEN>`
   - `CLICKUP_API_TOKEN`
   - `CLICKUP_LIST_ID`
   - `SLACK_WEBHOOK_URL`
@@ -225,5 +231,8 @@ Do not store live ClickUp or Slack secrets in repo-tracked files. Set:
 - `AP_TRANSACTIONS_URL`
 - `AP_TRANSACTIONS_AUTH_TOKEN`
 - `AP_UPLOAD_TOKEN`
+- `AP_ADMIN_USERNAME`
+- `AP_ADMIN_PASSWORD`
+- `AP_SESSION_SECRET`
 
 If a token has been pasted into chat or terminal history, rotate it immediately and replace it with a fresh secret in your secret manager.

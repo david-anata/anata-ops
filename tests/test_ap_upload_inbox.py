@@ -39,6 +39,33 @@ class ApUploadInboxTests(unittest.TestCase):
             self.assertTrue(ap_upload_inbox.token_is_valid("expected"))
             self.assertFalse(ap_upload_inbox.token_is_valid("wrong"))
 
+    def test_signed_session_round_trip_validates(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "AP_ADMIN_USERNAME": "apadmin",
+                "AP_ADMIN_PASSWORD": "secret-pass",
+                "AP_SESSION_SECRET": "session-secret",
+            },
+            clear=False,
+        ):
+            token = ap_upload_inbox.sign_session("apadmin", 4_102_444_800)
+            self.assertTrue(ap_upload_inbox.verify_session(token))
+
+    def test_request_is_admin_authenticated_uses_cookie(self):
+        with mock.patch.dict(
+            os.environ,
+            {
+                "AP_ADMIN_USERNAME": "apadmin",
+                "AP_ADMIN_PASSWORD": "secret-pass",
+                "AP_SESSION_SECRET": "session-secret",
+            },
+            clear=False,
+        ):
+            token = ap_upload_inbox.sign_session("apadmin", 4_102_444_800)
+            environ = {"HTTP_COOKIE": f"{ap_upload_inbox.SESSION_COOKIE_NAME}={token}"}
+            self.assertTrue(ap_upload_inbox.request_is_admin_authenticated(environ))
+
     def test_download_suffix_ignores_query_parameters(self):
         suffix = run_scheduled_audit.download_suffix("https://anata-ops-ap-inbox.onrender.com/latest.csv?token=secret")
         self.assertEqual(suffix, ".csv")

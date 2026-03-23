@@ -12,6 +12,12 @@ services:
     envVars:
       - key: AP_UPLOAD_TOKEN
         sync: false
+      - key: AP_ADMIN_USERNAME
+        sync: false
+      - key: AP_ADMIN_PASSWORD
+        sync: false
+      - key: AP_SESSION_SECRET
+        sync: false
       - key: AP_UPLOAD_STORAGE_DIR
         value: /var/data/ap_upload_inbox
       - key: AP_UPLOAD_MAX_BYTES

@@ -3,14 +3,18 @@
 
 from __future__ import annotations
 
+import base64
+import hashlib
+import hmac
 import html
 import json
 import os
 import re
 import shutil
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from email.parser import BytesParser
 from email.policy import default
+from http.cookies import SimpleCookie
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
 from urllib.parse import parse_qs, urlencode
@@ -24,6 +28,8 @@ LATEST_METADATA_FILENAME = "latest.json"
 ARCHIVE_DIRNAME = "archive"
 DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 ACCEPTED_EXTENSIONS = {".csv"}
+SESSION_COOKIE_NAME = "ap_upload_session"
+SESSION_TTL_SECONDS = 12 * 60 * 60
 
 
 def storage_dir() -> Path:
@@ -39,8 +45,28 @@ def max_upload_bytes() -> int:
         return DEFAULT_MAX_BYTES
 
 
-def configured_token() -> str:
+def machine_token() -> str:
     return os.getenv("AP_UPLOAD_TOKEN", "").strip()
+
+
+def admin_username() -> str:
+    return os.getenv("AP_ADMIN_USERNAME", "").strip()
+
+
+def admin_password() -> str:
+    return os.getenv("AP_ADMIN_PASSWORD", "").strip()
+
+
+def admin_login_enabled() -> bool:
+    return bool(admin_username() and admin_password())
+
+
+def session_secret() -> str:
+    return (
+        os.getenv("AP_SESSION_SECRET", "").strip()
+        or machine_token()
+        or admin_password()
+    )
 
 
 def ensure_storage(root: Path) -> None:
@@ -93,10 +119,82 @@ def request_token(environ: Dict[str, Any], form: Optional[Dict[str, Any]] = None
 
 
 def token_is_valid(token: str) -> bool:
-    configured = configured_token()
+    configured = machine_token()
     if not configured:
         return True
     return bool(token) and token == configured
+
+
+def parse_cookie_header(environ: Dict[str, Any]) -> Dict[str, str]:
+    raw = environ.get("HTTP_COOKIE", "")
+    if not raw:
+        return {}
+    cookie = SimpleCookie()
+    cookie.load(raw)
+    return {name: morsel.value for name, morsel in cookie.items()}
+
+
+def sign_session(username: str, expires_at: int) -> str:
+    secret = session_secret()
+    if not secret:
+        raise ValueError("AP_SESSION_SECRET, AP_UPLOAD_TOKEN, or AP_ADMIN_PASSWORD is required when login is enabled.")
+    payload = f"{username}:{expires_at}"
+    signature = hmac.new(secret.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    token = f"{payload}:{signature}"
+    return base64.urlsafe_b64encode(token.encode("utf-8")).decode("utf-8")
+
+
+def verify_session(token: str) -> bool:
+    if not admin_login_enabled():
+        return True
+    if not token:
+        return False
+    try:
+        decoded = base64.urlsafe_b64decode(token.encode("utf-8")).decode("utf-8")
+        username, expires_at_raw, signature = decoded.rsplit(":", 2)
+        expires_at = int(expires_at_raw)
+    except Exception:
+        return False
+    if username != admin_username() or expires_at < int(datetime.now(timezone.utc).timestamp()):
+        return False
+    payload = f"{username}:{expires_at}"
+    expected = hmac.new(session_secret().encode("utf-8"), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+
+def request_is_admin_authenticated(environ: Dict[str, Any]) -> bool:
+    if not admin_login_enabled():
+        return True
+    cookies = parse_cookie_header(environ)
+    return verify_session(cookies.get(SESSION_COOKIE_NAME, ""))
+
+
+def set_cookie_header(environ: Dict[str, Any], cookie_value: str) -> str:
+    secure = (environ.get("HTTP_X_FORWARDED_PROTO") or environ.get("wsgi.url_scheme") or "http") == "https"
+    parts = [
+        f"{SESSION_COOKIE_NAME}={cookie_value}",
+        "Path=/",
+        f"Max-Age={SESSION_TTL_SECONDS}",
+        "HttpOnly",
+        "SameSite=Lax",
+    ]
+    if secure:
+        parts.append("Secure")
+    return "; ".join(parts)
+
+
+def clear_cookie_header(environ: Dict[str, Any]) -> str:
+    secure = (environ.get("HTTP_X_FORWARDED_PROTO") or environ.get("wsgi.url_scheme") or "http") == "https"
+    parts = [
+        f"{SESSION_COOKIE_NAME}=",
+        "Path=/",
+        "Max-Age=0",
+        "HttpOnly",
+        "SameSite=Lax",
+    ]
+    if secure:
+        parts.append("Secure")
+    return "; ".join(parts)
 
 
 def current_metadata(root: Path) -> Dict[str, Any]:
@@ -156,31 +254,20 @@ def json_response(start_response: Any, status: str, payload: Dict[str, Any]) -> 
     return response(start_response, status, body, [("Content-Type", "application/json; charset=utf-8")])
 
 
-def redirect_response(start_response: Any, location: str) -> Iterable[bytes]:
-    return response(start_response, "303 See Other", b"", [("Location", location), ("Cache-Control", "no-store")])
+def redirect_response(start_response: Any, location: str, headers: Optional[Iterable[Tuple[str, str]]] = None) -> Iterable[bytes]:
+    base_headers = [("Location", location), ("Cache-Control", "no-store")]
+    if headers:
+        base_headers.extend(headers)
+    return response(start_response, "303 See Other", b"", base_headers)
 
 
-def html_page(status_message: str, metadata: Dict[str, Any], authorized: bool, latest_url: str) -> str:
-    latest_name = html.escape(metadata.get("original_filename", "No file uploaded"))
-    latest_uploaded_at = html.escape(format_timestamp(metadata.get("uploaded_at", "")))
-    latest_size = metadata.get("byte_size", 0)
-    status_block = f"<p class='status'>{html.escape(status_message)}</p>" if status_message else ""
-    download_block = (
-        f"<p><a href='{html.escape(latest_url)}'>Download current transactions CSV</a></p>"
-        if authorized and latest_url and metadata
-        else "<p>Provide the access token to enable the latest-file download link.</p>"
-    )
-    auth_hint = (
-        "<p class='hint'>This inbox is protected. Use the shared AP upload token to upload or download files.</p>"
-        if configured_token()
-        else "<p class='hint'>No AP upload token is configured yet. Upload and download are currently open.</p>"
-    )
+def page_shell(title: str, eyebrow: str, heading: str, intro: str, status_block: str, body: str) -> str:
     return f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Anata AP Upload Inbox</title>
+  <title>{html.escape(title)}</title>
   <style>
     :root {{
       --bg: #f2efe7;
@@ -236,6 +323,7 @@ def html_page(status_message: str, metadata: Dict[str, Any], authorized: bool, l
       font-size: 0.95rem;
       color: var(--muted);
     }}
+    input[type="text"],
     input[type="password"],
     input[type="file"] {{
       width: 100%;
@@ -256,11 +344,17 @@ def html_page(status_message: str, metadata: Dict[str, Any], authorized: bool, l
       cursor: pointer;
       margin-top: 14px;
     }}
+    .ghost {{
+      background: transparent;
+      border: 1px solid var(--line);
+      color: var(--ink);
+    }}
     .status {{
       background: rgba(14,110,88,.08);
       border-left: 4px solid var(--accent);
       padding: 12px 14px;
       border-radius: 12px;
+      margin-top: 18px;
     }}
     .hint {{
       color: var(--muted);
@@ -279,6 +373,16 @@ def html_page(status_message: str, metadata: Dict[str, Any], authorized: bool, l
       color: var(--muted);
       margin-bottom: 4px;
     }}
+    .toolbar {{
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+    }}
+    .toolbar form {{
+      margin: 0;
+    }}
     code {{
       background: rgba(24,32,42,.06);
       padding: 2px 6px;
@@ -289,18 +393,58 @@ def html_page(status_message: str, metadata: Dict[str, Any], authorized: bool, l
 <body>
   <main>
     <section class="hero">
-      <p style="margin:0;color:var(--accent-2);text-transform:uppercase;letter-spacing:.12em;font-size:.78rem;">Anata AP Intake</p>
-      <h1>Weekly Bank Export Inbox</h1>
-      <p>Upload the latest bank transactions CSV here. The AP audit jobs pull the current file from this inbox instead of depending on a local path.</p>
+      <p style="margin:0;color:var(--accent-2);text-transform:uppercase;letter-spacing:.12em;font-size:.78rem;">{html.escape(eyebrow)}</p>
+      <h1>{html.escape(heading)}</h1>
+      <p>{html.escape(intro)}</p>
       {status_block}
-      {auth_hint}
+      {body}
+    </section>
+  </main>
+</body>
+</html>"""
+
+
+def login_page(status_message: str) -> str:
+    status_block = f"<p class='status'>{html.escape(status_message)}</p>" if status_message else ""
+    body = """<div class="grid">
+        <section class="card">
+          <h2 style="margin-top:0;">Admin Login</h2>
+          <p class="hint">Use the AP admin credentials once, then the browser keeps a signed session for future uploads.</p>
+          <form action="/login" method="post">
+            <label for="username">Username</label>
+            <input id="username" name="username" type="text" autocomplete="username">
+            <label for="password" style="margin-top:14px;">Password</label>
+            <input id="password" name="password" type="password" autocomplete="current-password">
+            <button type="submit">Sign In</button>
+          </form>
+        </section>
+      </div>"""
+    return page_shell(
+        title="Anata AP Upload Login",
+        eyebrow="Anata AP Intake",
+        heading="Admin Login",
+        intro="Sign in before uploading the weekly bank transactions CSV.",
+        status_block=status_block,
+        body=body,
+    )
+
+
+def upload_page(status_message: str, metadata: Dict[str, Any]) -> str:
+    latest_name = html.escape(metadata.get("original_filename", "No file uploaded"))
+    latest_uploaded_at = html.escape(format_timestamp(metadata.get("uploaded_at", "")))
+    latest_size = metadata.get("byte_size", 0)
+    status_block = f"<p class='status'>{html.escape(status_message)}</p>" if status_message else ""
+    body = f"""<div class="toolbar">
+        <p class="hint">Upload the newest bank-export CSV. The daily and weekly AP audits always fetch the current file from this inbox.</p>
+        <form action="/logout" method="post">
+          <button class="ghost" type="submit">Log Out</button>
+        </form>
+      </div>
       <div class="grid">
         <section class="card">
           <h2 style="margin-top:0;">Upload Current File</h2>
           <form action="/upload" method="post" enctype="multipart/form-data">
-            <label for="access_token">Access Token</label>
-            <input id="access_token" name="access_token" type="password" autocomplete="current-password" placeholder="Paste AP upload token">
-            <label for="transaction_file" style="margin-top:14px;">Transactions CSV</label>
+            <label for="transaction_file">Transactions CSV</label>
             <input id="transaction_file" name="transaction_file" type="file" accept=".csv,text/csv">
             <button type="submit">Upload Latest CSV</button>
           </form>
@@ -310,14 +454,18 @@ def html_page(status_message: str, metadata: Dict[str, Any], authorized: bool, l
           <div class="metric"><strong>Filename</strong>{latest_name}</div>
           <div class="metric"><strong>Uploaded At</strong>{latest_uploaded_at}</div>
           <div class="metric"><strong>Size</strong>{latest_size:,} bytes</div>
-          {download_block}
-          <p class="hint">Cron jobs should use <code>/latest.csv</code> as the transaction source.</p>
+          <p><a href="/latest.csv">Download current transactions CSV</a></p>
+          <p class="hint">Cron jobs read <code>/latest.csv</code> using the machine token, but admins can also download it directly while logged in.</p>
         </section>
-      </div>
-    </section>
-  </main>
-</body>
-</html>"""
+      </div>"""
+    return page_shell(
+        title="Anata AP Upload Inbox",
+        eyebrow="Anata AP Intake",
+        heading="Weekly Bank Export Inbox",
+        intro="Submit the latest bank transactions CSV here instead of relying on a local file path.",
+        status_block=status_block,
+        body=body,
+    )
 
 
 def latest_download_url(environ: Dict[str, Any], token: str) -> str:
@@ -327,7 +475,7 @@ def latest_download_url(environ: Dict[str, Any], token: str) -> str:
     return f"{scheme}://{host}/latest.csv{query}"
 
 
-def parse_upload_form(environ: Dict[str, Any]) -> Dict[str, Any]:
+def parse_multipart_form(environ: Dict[str, Any]) -> Dict[str, Any]:
     content_type = environ.get("CONTENT_TYPE", "")
     if "multipart/form-data" not in content_type:
         raise ValueError("Expected multipart/form-data")
@@ -356,8 +504,34 @@ def parse_upload_form(environ: Dict[str, Any]) -> Dict[str, Any]:
     return form
 
 
+def parse_urlencoded_form(environ: Dict[str, Any]) -> Dict[str, str]:
+    content_length = int(environ.get("CONTENT_LENGTH") or "0")
+    body = environ["wsgi.input"].read(content_length).decode("utf-8")
+    parsed = parse_qs(body, keep_blank_values=True)
+    return {key: values[-1] for key, values in parsed.items() if values}
+
+
 def upload_error(start_response: Any, status: str, message: str) -> Iterable[bytes]:
     return text_response(start_response, status, message, "text/plain; charset=utf-8")
+
+
+def login_status_message(query: Dict[str, str]) -> str:
+    status_message = query.get("status", "")
+    if status_message == "uploaded":
+        return "Upload accepted and current AP transaction file updated."
+    if status_message == "logged-out":
+        return "You have been logged out."
+    if status_message == "bad-login":
+        return "Login failed. Check the admin username and password."
+    if status_message == "unauthorized":
+        return "Sign in first."
+    if status_message == "missing-file":
+        return "Choose a CSV file before uploading."
+    if status_message == "bad-type":
+        return "Only CSV uploads are accepted."
+    if status_message == "too-large":
+        return f"Upload exceeds the {max_upload_bytes():,}-byte limit."
+    return ""
 
 
 def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
@@ -369,29 +543,27 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
     metadata = current_metadata(root)
 
     if method == "GET" and path == "/health":
-        return json_response(start_response, "200 OK", {"ok": True, "latest_upload": metadata})
+        return json_response(
+            start_response,
+            "200 OK",
+            {
+                "ok": True,
+                "admin_login_enabled": admin_login_enabled(),
+                "latest_upload": metadata,
+                "machine_download_url": latest_download_url(environ, machine_token()) if machine_token() else latest_download_url(environ, ""),
+            },
+        )
 
     if method == "GET" and path in {"/", "/index.html"}:
-        token = request_token(environ)
-        authorized = token_is_valid(token)
-        status_message = query.get("status", "")
-        if status_message == "uploaded":
-            status_message = "Upload accepted and current AP transaction file updated."
-        elif status_message == "unauthorized":
-            status_message = "Access token rejected."
-        elif status_message == "missing-file":
-            status_message = "Choose a CSV file before uploading."
-        elif status_message == "bad-type":
-            status_message = "Only CSV uploads are accepted."
-        elif status_message == "too-large":
-            status_message = f"Upload exceeds the {max_upload_bytes():,}-byte limit."
-        download_url = latest_download_url(environ, token) if authorized and metadata else ""
-        body = html_page(status_message, metadata, authorized, download_url)
+        status_message = login_status_message(query)
+        if request_is_admin_authenticated(environ):
+            body = upload_page(status_message, metadata)
+        else:
+            body = login_page(status_message)
         return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
 
     if method == "GET" and path == "/latest.csv":
-        token = request_token(environ)
-        if not token_is_valid(token):
+        if not (request_is_admin_authenticated(environ) or token_is_valid(request_token(environ))):
             return text_response(start_response, "401 Unauthorized", "Unauthorized")
         latest_path = latest_file_path(root)
         if not latest_path.exists():
@@ -404,33 +576,41 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
         ]
         return response(start_response, "200 OK", body, headers)
 
+    if method == "POST" and path == "/login":
+        form = parse_urlencoded_form(environ)
+        if not admin_login_enabled():
+            return redirect_response(start_response, "/")
+        if form.get("username", "").strip() != admin_username() or form.get("password", "") != admin_password():
+            return redirect_response(start_response, "/?status=bad-login")
+        expires_at = int((datetime.now(timezone.utc) + timedelta(seconds=SESSION_TTL_SECONDS)).timestamp())
+        cookie_header = set_cookie_header(environ, sign_session(admin_username(), expires_at))
+        return redirect_response(start_response, "/", headers=[("Set-Cookie", cookie_header)])
+
+    if method == "POST" and path == "/logout":
+        return redirect_response(start_response, "/?status=logged-out", headers=[("Set-Cookie", clear_cookie_header(environ))])
+
     if method == "POST" and path == "/upload":
+        if not request_is_admin_authenticated(environ):
+            return redirect_response(start_response, "/?status=unauthorized")
         try:
-            form = parse_upload_form(environ)
+            form = parse_multipart_form(environ)
         except ValueError:
             return upload_error(start_response, "400 Bad Request", "Could not parse upload form.")
-
-        token = request_token(environ, form)
-        if not token_is_valid(token):
-            return upload_error(start_response, "401 Unauthorized", "Unauthorized")
-
         if "transaction_file" not in form:
-            return upload_error(start_response, "400 Bad Request", "Missing transaction_file.")
-
+            return redirect_response(start_response, "/?status=missing-file")
         upload_field = form["transaction_file"]
         if not isinstance(upload_field, dict):
-            return upload_error(start_response, "400 Bad Request", "Missing uploaded file.")
+            return redirect_response(start_response, "/?status=missing-file")
         filename = str(upload_field.get("filename", "")).strip()
         if not filename:
-            return upload_error(start_response, "400 Bad Request", "Missing file name.")
+            return redirect_response(start_response, "/?status=missing-file")
         if Path(filename).suffix.lower() not in ACCEPTED_EXTENSIONS:
-            return upload_error(start_response, "400 Bad Request", "Only CSV uploads are accepted.")
+            return redirect_response(start_response, "/?status=bad-type")
         content = upload_field.get("content", b"")
         if not isinstance(content, bytes):
             return upload_error(start_response, "400 Bad Request", "Uploaded file content was invalid.")
         if len(content) > max_upload_bytes():
-            return upload_error(start_response, "413 Payload Too Large", "Upload exceeds the configured size limit.")
-
+            return redirect_response(start_response, "/?status=too-large")
         store_upload(root, filename, content)
         return redirect_response(start_response, "/?status=uploaded")
 
