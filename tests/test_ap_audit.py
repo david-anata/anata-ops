@@ -227,6 +227,32 @@ class ApAuditTests(unittest.TestCase):
         transactions = ap_audit.normalize_transactions(rows, self.rules)
         self.assertEqual(transactions, [])
 
+    def test_withdrawal_pos_resolves_real_merchant(self):
+        rows = [
+            {
+                "Posting Date": "3/17/2026",
+                "Amount": "-115.69",
+                "Description": "Withdrawal POS # COSTCO WHSE #0733 LEHI UT Card 8175",
+                "Reference Number": "3936298137",
+                "Type": "Card",
+            }
+        ]
+        transactions = ap_audit.normalize_transactions(rows, self.rules)
+        self.assertEqual(transactions[0].vendor_name, "Costco")
+
+    def test_withdrawal_overdraft_becomes_overdraft_fee(self):
+        rows = [
+            {
+                "Posting Date": "3/22/2026",
+                "Amount": "-25.00",
+                "Description": "Withdrawal Overd",
+                "Reference Number": "3946349143",
+                "Type": "Retail ACH",
+            }
+        ]
+        transactions = ap_audit.normalize_transactions(rows, self.rules)
+        self.assertEqual(transactions[0].vendor_name, "Overdraft Fee")
+
     def test_build_clickup_update_actions_merges_group_rollups_per_task(self):
         schema_fields = [
             {"id": "amount-field", "name": "Amount*", "type": "currency", "type_config": {}},

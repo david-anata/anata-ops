@@ -56,12 +56,33 @@ DEFAULT_VENDOR_ALIASES = {
     "wise us inc": "Wise",
     "bear river": "Bear River",
     "intuit": "Intuit",
+    "questargas": "Questar Gas",
     "questar gas": "Questar Gas",
     "enb gas": "Enbridge Gas",
     "enbridge gas": "Enbridge Gas",
     "fora financial": "Fora Loan",
+    "forafinancial": "Fora Loan",
+    "forafinancial s6": "Fora Loan",
     "stripe capital": "Stripe Capital",
+    "ondeck capital": "Ondeck Capital",
+    "odkraod": "Ondeck Capital",
     "appfolio": "AppFolio",
+    "amazon mktpl": "Amazon Marketplace",
+    "amazon marketplace": "Amazon Marketplace",
+    "amazon com": "Amazon Marketplace",
+    "rockymtn pacific": "Rocky Mountain Power",
+    "rockymtn/pacific": "Rocky Mountain Power",
+    "costco whse": "Costco",
+    "costco": "Costco",
+    "wal mart": "Walmart",
+    "walmart": "Walmart",
+    "round up": "Round Up",
+    "openai subscr": "OpenAI ChatGPT",
+    "openai": "OpenAI",
+    "perplexity ai": "Perplexity",
+    "instamed": "InstaMed",
+    "wyze labs": "Wyze",
+    "withdrawal overd": "Overdraft Fee",
 }
 
 DEFAULT_GROUPED_VENDORS = {
@@ -100,10 +121,20 @@ DEFAULT_CATEGORY_BY_VENDOR = {
     "Fora Loan": "Loan Payment",
     "Stripe Capital": "Loan Payment",
     "AppFolio": "Software",
+    "Ondeck Capital": "Loan Payment",
     "Intuit": "Software",
     "Intuit Payroll": "Payroll Adjacent",
     "Intuit Payroll Tax": "Payroll Tax",
     "Intuit Transaction Fee": "Bank Fees",
+    "Costco": "Operations",
+    "Walmart": "Operations",
+    "Round Up": "Operations",
+    "OpenAI": "Software",
+    "OpenAI ChatGPT": "Software",
+    "Perplexity": "Software",
+    "InstaMed": "Insurance",
+    "Wyze": "Operations",
+    "Overdraft Fee": "Bank Fees",
 }
 
 DEFAULT_RECURRING_VENDORS = {
@@ -128,9 +159,13 @@ DEFAULT_RECURRING_VENDORS = {
     "Fora Loan": "Weekly",
     "Stripe Capital": "Weekly",
     "AppFolio": "Monthly",
+    "Ondeck Capital": "Weekly",
     "Intuit Payroll": "Weekly",
     "Intuit Payroll Tax": "Weekly",
     "Intuit Transaction Fee": "Weekly",
+    "OpenAI": "Monthly",
+    "OpenAI ChatGPT": "Monthly",
+    "Perplexity": "Monthly",
 }
 
 DEFAULT_STANDALONE_VENDORS = {
@@ -142,6 +177,7 @@ DEFAULT_STANDALONE_VENDORS = {
     "Amazon Marketplace",
     "Equipment Finance",
     "Meta Ads",
+    "Ondeck Capital",
     "Intuit Payroll",
     "Intuit Payroll Tax",
     "Intuit Transaction Fee",
@@ -525,6 +561,16 @@ def extract_vendor_hint(raw_vendor: str) -> str:
         company = company.replace("TYPE:", "").strip()
         if company:
             return normalize_spaces(company)
+    if lower.startswith("withdrawal pos"):
+        merchant = re.split(r"\bcard\b", text[14:], flags=re.IGNORECASE)[0]
+        merchant = merchant.replace("#", " ").strip()
+        merchant = re.sub(r"\s+\d{3,}.*$", "", merchant).strip()
+        merchant = re.sub(r"\b[A-Z]{2}\b$", "", merchant).strip()
+        merchant = normalize_spaces(merchant)
+        if merchant:
+            return merchant
+    if lower.startswith("withdrawal overd"):
+        return "Overdraft Fee"
     if lower.startswith("withdrawal debit "):
         merchant = re.split(r"\bdate\b|\bcard\b", text[17:], flags=re.IGNORECASE)[0]
         merchant = re.sub(r"^(DNH\*|SPI\*|WWW\.|SQ \*|TST\*|POS DEBIT )", "", merchant, flags=re.IGNORECASE)

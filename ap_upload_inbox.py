@@ -614,7 +614,7 @@ def build_archive_analysis(root: Path, metadata: Dict[str, Any], systems: Dict[s
         "current_transaction_count": len(current_transactions),
         "historical_upload_count": len(history_files),
         "total_current_spend": round(sum(transaction.amount for transaction in current_transactions), 2),
-        "history_note": "" if baseline_ready else "Growth comparisons need at least one earlier uploaded file. New-charge checks still use live ClickUp and QBO vendors when connected.",
+        "history_note": "" if baseline_ready else "Growth comparisons need at least one earlier uploaded file. New-charge checks still use live ClickUp vendors, and QuickBooks only if that later phase is enabled.",
         "new_charges": new_charges[:12],
         "spend_growth": spend_growth[:12],
         "savings_opportunities": deduped_savings[:12],
@@ -722,12 +722,10 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
         else ""
     )
     systems = archive_analysis.get("systems") or live_audit.get("systems") or {}
-    systems_html = "".join(
-        [
-            render_system_card("ClickUp AP", systems.get("clickup", {})),
-            render_system_card("QuickBooks Vendors", systems.get("qbo", {})),
-        ]
-    )
+    system_cards = [render_system_card("ClickUp AP", systems.get("clickup", {}))]
+    if systems.get("qbo", {}).get("configured") or systems.get("qbo", {}).get("connected"):
+        system_cards.append(render_system_card("QuickBooks Vendors", systems.get("qbo", {})))
+    systems_html = "".join(system_cards)
     return f"""
       <div class="grid section-gap">
         <section class="card">
@@ -776,7 +774,7 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
       <div class="grid section-gap">
         <section class="card">
           <h2 class="section-title">Connected Systems</h2>
-          <p class="hint">Vendor recognition and audit confidence improve when both AP and accounting systems are connected.</p>
+          <p class="hint">Phase 1 runs from ClickUp AP. Additional accounting connections stay optional until you enable them later.</p>
           <div class="system-grid">{systems_html}</div>
         </section>
       </div>
