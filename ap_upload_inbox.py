@@ -3,13 +3,14 @@
 
 from __future__ import annotations
 
-import cgi
 import html
 import json
 import os
 import re
 import shutil
 from datetime import datetime, timezone
+from email.parser import BytesParser
+from email.policy import default
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
 from urllib.parse import parse_qs, urlencode
@@ -80,10 +81,10 @@ def authorization_header_token(environ: Dict[str, Any]) -> str:
     return ""
 
 
-def request_token(environ: Dict[str, Any], form: Optional[cgi.FieldStorage] = None) -> str:
-    if form is not None and "access_token" in form:
-        value = form.getfirst("access_token", "")
-        if value:
+def request_token(environ: Dict[str, Any], form: Optional[Dict[str, Any]] = None) -> str:
+    if form is not None:
+        value = form.get("access_token", "")
+        if isinstance(value, str) and value:
             return value.strip()
     query = parse_query_string(environ)
     if query.get("token"):
@@ -326,12 +327,33 @@ def latest_download_url(environ: Dict[str, Any], token: str) -> str:
     return f"{scheme}://{host}/latest.csv{query}"
 
 
-def parse_upload_form(environ: Dict[str, Any]) -> cgi.FieldStorage:
-    return cgi.FieldStorage(
-        fp=environ["wsgi.input"],
-        environ=environ,
-        keep_blank_values=True,
-    )
+def parse_upload_form(environ: Dict[str, Any]) -> Dict[str, Any]:
+    content_type = environ.get("CONTENT_TYPE", "")
+    if "multipart/form-data" not in content_type:
+        raise ValueError("Expected multipart/form-data")
+    content_length = int(environ.get("CONTENT_LENGTH") or "0")
+    body = environ["wsgi.input"].read(content_length)
+    raw_message = f"Content-Type: {content_type}\r\nMIME-Version: 1.0\r\n\r\n".encode("utf-8") + body
+    message = BytesParser(policy=default).parsebytes(raw_message)
+    form: Dict[str, Any] = {}
+    for part in message.iter_parts():
+        if part.get_content_disposition() != "form-data":
+            continue
+        name = part.get_param("name", header="content-disposition")
+        if not name:
+            continue
+        filename = part.get_filename()
+        payload = part.get_payload(decode=True) or b""
+        if filename is not None:
+            form[name] = {
+                "filename": filename,
+                "content": payload,
+                "content_type": part.get_content_type(),
+            }
+            continue
+        charset = part.get_content_charset() or "utf-8"
+        form[name] = payload.decode(charset, errors="replace")
+    return form
 
 
 def upload_error(start_response: Any, status: str, message: str) -> Iterable[bytes]:
@@ -396,12 +418,16 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
             return upload_error(start_response, "400 Bad Request", "Missing transaction_file.")
 
         upload_field = form["transaction_file"]
-        filename = getattr(upload_field, "filename", "") or ""
+        if not isinstance(upload_field, dict):
+            return upload_error(start_response, "400 Bad Request", "Missing uploaded file.")
+        filename = str(upload_field.get("filename", "")).strip()
         if not filename:
             return upload_error(start_response, "400 Bad Request", "Missing file name.")
         if Path(filename).suffix.lower() not in ACCEPTED_EXTENSIONS:
             return upload_error(start_response, "400 Bad Request", "Only CSV uploads are accepted.")
-        content = upload_field.file.read()
+        content = upload_field.get("content", b"")
+        if not isinstance(content, bytes):
+            return upload_error(start_response, "400 Bad Request", "Uploaded file content was invalid.")
         if len(content) > max_upload_bytes():
             return upload_error(start_response, "413 Payload Too Large", "Upload exceeds the configured size limit.")
 
