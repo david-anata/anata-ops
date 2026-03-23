@@ -1,0 +1,64 @@
+services:
+  - type: cron
+    name: anata-ops-ap-daily
+    runtime: python
+    repo: https://github.com/david-anata/anata-ops.git
+    branch: main
+    plan: starter
+    region: oregon
+    buildCommand: python3 -m py_compile ap_audit.py scripts/run_scheduled_audit.py
+    startCommand: python3 scripts/run_scheduled_audit.py --mode daily
+    schedule: "0 * * * 1-5"
+    envVars:
+      - key: CLICKUP_API_TOKEN
+        sync: false
+      - key: CLICKUP_LIST_ID
+        sync: false
+      - key: CLICKUP_VIEW_ID
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: AP_TRANSACTIONS_PATH
+        sync: false
+      - key: AP_TRANSACTIONS_URL
+        sync: false
+      - key: AP_LOOKBACK_DAYS
+        value: "7"
+      - key: AP_APPLY_CLICKUP_UPDATES
+        value: "true"
+      - key: AP_POST_SLACK
+        value: "true"
+      - key: AP_DATA_DIR
+        value: "data"
+  - type: cron
+    name: anata-ops-ap-weekly
+    runtime: python
+    repo: https://github.com/david-anata/anata-ops.git
+    branch: main
+    plan: starter
+    region: oregon
+    buildCommand: python3 -m py_compile ap_audit.py scripts/run_scheduled_audit.py
+    startCommand: python3 scripts/run_scheduled_audit.py --mode weekly
+    schedule: "30 * * * 1"
+    envVars:
+      - key: CLICKUP_API_TOKEN
+        sync: false
+      - key: CLICKUP_LIST_ID
+        sync: false
+      - key: CLICKUP_VIEW_ID
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: AP_TRANSACTIONS_PATH
+        sync: false
+      - key: AP_TRANSACTIONS_URL
+        sync: false
+      - key: AP_LOOKBACK_DAYS
+        value: "7"
+      - key: AP_APPLY_CLICKUP_UPDATES
+        value: "true"
+      - key: AP_POST_SLACK
+        value: "true"
+      - key: AP_DATA_DIR
+        value: "data"
+

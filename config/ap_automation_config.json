@@ -1,0 +1,22 @@
+{
+  "timezone": "America/Denver",
+  "daily_warning": {
+    "enabled": true,
+    "schedule": {
+      "type": "weekday",
+      "hour": 8,
+      "minute": 0
+    },
+    "scope": "due_overdue_partial_material"
+  },
+  "weekly_review": {
+    "enabled": true,
+    "schedule": {
+      "type": "weekly",
+      "day": "MO",
+      "hour": 8,
+      "minute": 30
+    }
+  },
+  "material_warning_amount": 500.0
+}

@@ -1,0 +1,29 @@
+{
+  "vendor_aliases": {
+    "google *workspace": "Google Workspace",
+    "intuit qbooks": "QuickBooks",
+    "adobe *creative cloud": "Adobe Creative Cloud",
+    "amazon web services": "AWS",
+    "amzn": "AMZN"
+  },
+  "grouped_vendors": {
+    "Google Workspace": "Software | SaaS Rollup | Mar 2026",
+    "Adobe Creative Cloud": "Software | SaaS Rollup | Mar 2026",
+    "Canva": "Software | SaaS Rollup | Mar 2026",
+    "Loom": "Software | SaaS Rollup | Mar 2026"
+  },
+  "grouped_categories": [
+    "Software"
+  ],
+  "standalone_vendors": [
+    "AWS",
+    "NetSuite",
+    "QuickBooks",
+    "ULINE",
+    "Rocky Mountain Power",
+    "Amazon Marketplace",
+    "Equipment Finance",
+    "Meta Ads"
+  ],
+  "critical_amount": 1000.0
+}

@@ -1,0 +1,19 @@
+{
+  "required_custom_fields": [
+    {"name": "Canonical Vendor", "type": "short_text"},
+    {"name": "Expense Category", "type": "drop_down"},
+    {"name": "AP State", "type": "drop_down", "options": ["Scheduled", "Due This Week", "Partially Paid", "Paid", "Overdue - Review Needed", "Removed / No Longer Due", "Grouped"]},
+    {"name": "Amount Paid", "type": "currency"},
+    {"name": "Remaining Balance", "type": "currency"},
+    {"name": "Expected Withdrawal Date", "type": "date"},
+    {"name": "Grouped Flag", "type": "checkbox"},
+    {"name": "Group Name", "type": "short_text"},
+    {"name": "Cashflow Priority", "type": "drop_down", "options": ["Critical", "High", "Medium", "Low"]},
+    {"name": "Slack Warning Tier", "type": "drop_down", "options": ["CRITICAL", "HIGH", "MEDIUM", "LOW"]},
+    {"name": "Transaction References", "type": "short_text"},
+    {"name": "Last Reviewed Date", "type": "date"},
+    {"name": "Last Audit Result", "type": "drop_down", "options": ["MATCHED", "MATCHED_NEEDS_UPDATE", "MISSING_CREATE_NEW", "POSSIBLE_GROUPED_ITEM", "OVERDUE_REVIEW_REQUIRED", "UPCOMING_WARNING", "UNCLEAR_REQUIRES_REVIEW"]},
+    {"name": "Needs Human Review", "type": "checkbox"},
+    {"name": "Task Class", "type": "drop_down", "options": ["Standalone AP", "Grouped Rollup", "Review Queue"]}
+  ]
+}

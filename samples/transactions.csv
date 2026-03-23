@@ -1,0 +1,11 @@
+reference,date,vendor,amount,account,memo
+txn-1001,2026-03-18,GOOGLE *WORKSPACE,84.00,Chase Ink 4242,Workspace seats
+txn-1002,2026-03-18,ADOBE *CREATIVE CLOUD,59.99,Chase Ink 4242,Design licenses
+txn-1003,2026-03-19,INTUIT QBOOKS,97.50,Amex Blue 9988,Monthly bookkeeping software
+txn-1004,2026-03-20,ULINE,312.44,Bank of America ACH,Packaging supplies
+txn-1005,2026-03-20,NETSUITE,1250.00,Bank of America ACH,ERP renewal
+txn-1006,2026-03-22,ROCKY MOUNTAIN POWER,642.18,Bank of America ACH,Utility autopay
+txn-1007,2026-03-20,CANVA,14.99,Chase Ink 4242,Existing paid item
+txn-1008,2026-03-21,AMAZON WEB SERVICES,406.17,Amex Blue 9988,Cloud hosting
+txn-1009,2026-03-22,AMZN,122.87,Amex Blue 9988,Amazon charge needs classification
+txn-1010,2026-03-22,SNOWFLAKE,406.17,Amex Blue 9988,Data warehouse charge

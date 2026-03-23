@@ -1,0 +1,11 @@
+task_id,task_name,vendor_name,category,amount_due,amount_paid,remaining_balance,frequency,due_date,expected_charge_date,status,payment_method,grouped_flag,notes,transaction_references,cashflow_priority,slack_warning_flag,last_reviewed_date
+task-001,Software | SaaS Rollup | Mar 2026,Grouped Software Subscriptions,Software,150.00,0.00,150.00,Monthly,2026-03-31,2026-03-31,Grouped,Corporate Card,true,Keep itemized vendor notes,,Medium,true,
+task-002,Software | QuickBooks | Mar 2026,QuickBooks,Software,97.50,0.00,97.50,Monthly,2026-03-19,2026-03-19,Upcoming,Amex Blue 9988,false,, ,Medium,true,
+task-003,Warehouse Expense | ULINE | Mar 2026,ULINE,Warehouse Expense,280.00,0.00,280.00,Monthly,2026-03-21,2026-03-21,Due This Week,Bank of America ACH,false,, ,Medium,true,
+task-004,ERP | NetSuite | Due Mar 18 2026,NetSuite,ERP,1250.00,0.00,1250.00,Monthly,2026-03-18,2026-03-18,Overdue,Bank of America ACH,false,, ,High,true,
+task-005,Utilities | Rocky Mountain Power | Due Mar 25 2026,Rocky Mountain Power,Utilities,642.18,0.00,642.18,Monthly,2026-03-25,2026-03-25,Scheduled,Bank of America ACH,false,, ,High,true,
+task-006,Software | Canva | Mar 2026,Canva,Software,14.99,14.99,0.00,Monthly,2026-03-20,2026-03-20,Paid,Chase Ink 4242,false,Already reconciled,txn-1007,Low,false,2026-03-20
+task-007,Loan Payment | Equipment Finance | Due Mar 20 2026,Equipment Finance,Loan Payment,980.00,0.00,980.00,Monthly,2026-03-20,2026-03-20,Overdue,Bank of America ACH,false,, ,Critical,true,
+task-008,Marketing | Meta Ads | Mar 2026,Meta Ads,Marketing,500.00,300.00,200.00,Weekly,2026-03-24,2026-03-24,Partially Paid,Amex Blue 9988,false,Watch daily spend,meta-partial-01,High,true,2026-03-21
+task-009,Operations | Amazon Marketplace | Mar 2026,Amazon Marketplace,Operations,122.87,0.00,122.87,Monthly,2026-03-22,2026-03-22,Due This Week,Amex Blue 9988,false,, ,Medium,true,
+task-010,Cloud Infrastructure | AWS | Mar 2026,AWS,Cloud Infrastructure,122.87,0.00,122.87,Monthly,2026-03-22,2026-03-22,Due This Week,Amex Blue 9988,false,, ,Medium,true,

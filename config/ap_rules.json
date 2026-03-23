@@ -1,0 +1,16 @@
+{
+  "grouped_categories": [
+    "Software",
+    "Marketing",
+    "Operations"
+  ],
+  "never_group_categories": [
+    "Utilities",
+    "Insurance",
+    "Payroll Adjacent",
+    "Payroll Tax",
+    "Loan Payment",
+    "Credit Card"
+  ],
+  "material_warning_amount": 500.0
+}
