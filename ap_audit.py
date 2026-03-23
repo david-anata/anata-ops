@@ -148,15 +148,30 @@ DEFAULT_STANDALONE_VENDORS = {
 }
 
 TRANSACTION_FIELD_ALIASES = {
-    "reference": ["reference", "transaction_reference", "id", "txn_id"],
-    "date": ["date", "transaction_date", "posted_date", "posting date", "effective_date"],
-    "vendor": ["vendor", "merchant", "description", "payee", "name"],
+    "reference": ["reference", "reference number", "transaction_reference", "transaction id", "id", "txn_id"],
+    "date": ["date", "transaction_date", "posted_date", "posting date", "effective_date", "effective date"],
+    "vendor": ["vendor", "merchant", "description", "extended description", "extended_description", "payee", "name"],
     "amount": ["amount", "debit", "withdrawal_amount", "value"],
     "transaction_type": ["transaction_type", "transaction type", "type", "entry_type"],
     "account": ["account", "account_name", "source_account", "card", "source"],
-    "memo": ["memo", "note", "notes", "details"],
-    "category": ["category", "expense_category"],
+    "memo": ["memo", "note", "notes", "details", "extended description", "extended_description"],
+    "category": ["category", "expense_category", "transaction category"],
 }
+
+TRANSACTION_PRIMARY_DESCRIPTOR_FIELDS = [
+    "extended description",
+    "extended_description",
+    "description",
+    "vendor",
+    "merchant",
+    "payee",
+    "name",
+]
+
+TRANSACTION_SECONDARY_DESCRIPTOR_FIELDS = [
+    "memo",
+    "details",
+]
 
 TASK_FIELD_ALIASES = {
     "task_id": ["task_id", "id"],
@@ -409,6 +424,44 @@ def pick_value(row: Dict[str, Any], aliases: Sequence[str]) -> Any:
     return ""
 
 
+def row_text(row: Dict[str, Any]) -> str:
+    return " ".join(normalize_spaces(str(value)) for value in row.values() if str(value or "").strip())
+
+
+def descriptor_score(value: str) -> int:
+    text = normalize_spaces(value)
+    if not text:
+        return -10_000
+    score = len(text)
+    lowered = text.lower()
+    if any(token in lowered for token in ("co:", "entry class code", "ach trace number", "withdrawal debit", "withdrawal ach", "payment to ", "intuit service charges/fees")):
+        score += 60
+    if any(token in lowered for token in ("extended", "type:", "name:", "amzn.com/bill", "a2a transfer", "stripe cap", "forafinancial")):
+        score += 30
+    if re.fullmatch(r"withdrawal\s+ach\b.*", lowered) or re.fullmatch(r"withdrawal\s+home\b.*", lowered):
+        score -= 25
+    if lowered in {"amazon", "paypal", "wise", "google", "intuit", "payment", "withdrawal"}:
+        score -= 20
+    return score
+
+
+def pick_transaction_vendor_text(row: Dict[str, Any]) -> str:
+    lowered = {str(key).strip().lower(): value for key, value in row.items()}
+    candidates: List[str] = []
+    for field_name in TRANSACTION_PRIMARY_DESCRIPTOR_FIELDS:
+        value = normalize_spaces(str(lowered.get(field_name, "")))
+        if value:
+            candidates.append(value)
+    if not candidates:
+        for field_name in TRANSACTION_SECONDARY_DESCRIPTOR_FIELDS:
+            value = normalize_spaces(str(lowered.get(field_name, "")))
+            if value:
+                candidates.append(value)
+    if not candidates:
+        return str(pick_value(row, TRANSACTION_FIELD_ALIASES["vendor"]))
+    return max(candidates, key=descriptor_score)
+
+
 def normalize_vendor(raw_vendor: str, rules: Dict[str, Any]) -> str:
     raw_vendor = normalize_spaces(raw_vendor or "")
     if not raw_vendor:
@@ -434,17 +487,39 @@ def extract_vendor_hint(raw_vendor: str) -> str:
     text = normalize_spaces(raw_vendor)
     lower = text.lower()
 
+    if "a2a transfer" in lower:
+        return "Internal Transfer"
+
     if lower.startswith("payment to "):
         return text[11:]
     if lower.startswith("transfer to ") or lower.startswith("from share") or lower.startswith("to share"):
         return "Internal Transfer"
     if lower.startswith("withdrawal ach") and "co:" in lower:
+        type_match = re.search(r"\btype:\s*(.*?)\s+co:\s*", text, flags=re.IGNORECASE)
+        company_match = re.search(
+            r"\bco:\s*(.*?)(?:\s{2,}|entry class code|ach trace number|name:|$)",
+            text,
+            flags=re.IGNORECASE,
+        )
+        ach_type = normalize_spaces(type_match.group(1)) if type_match else ""
+        company = normalize_spaces(company_match.group(1)) if company_match else ""
+        combined = normalize_key(f"{ach_type} {company}")
         if "co: intuit" in lower and "type: payroll" in lower:
             return "Intuit Payroll"
         if "co: intuit" in lower and "type: tax" in lower:
             return "Intuit Payroll Tax"
         if "co: intuit" in lower and "type: tran fee" in lower:
             return "Intuit Transaction Fee"
+        if "stripe cap" in combined:
+            return "Stripe Capital"
+        if "wise" in combined:
+            return "Wise"
+        if "bear river" in combined:
+            return "Bear River"
+        if "citi autopay" in combined:
+            return "Citibank"
+        if company and normalize_key(company) not in {"anata"}:
+            return company
         company = re.split(r"entry class code|ach trace number", text, flags=re.IGNORECASE)[0]
         company = re.split(r"\bco:\b", company, flags=re.IGNORECASE)[-1]
         company = company.replace("TYPE:", "").strip()
@@ -949,7 +1024,7 @@ def parse_raw_blocks(content: str) -> List[Dict[str, Any]]:
 def normalize_transactions(rows: Iterable[Dict[str, Any]], rules: Dict[str, Any]) -> List[Transaction]:
     transactions: List[Transaction] = []
     for index, row in enumerate(rows, start=1):
-        vendor_raw = str(pick_value(row, TRANSACTION_FIELD_ALIASES["vendor"]))
+        vendor_raw = pick_transaction_vendor_text(row)
         vendor_name = normalize_vendor(vendor_raw, rules)
         reference = str(pick_value(row, TRANSACTION_FIELD_ALIASES["reference"])) or f"txn-{index:04d}"
         transaction = Transaction(
@@ -977,20 +1052,24 @@ def include_transaction(transaction: Transaction) -> bool:
             transaction.vendor_raw,
             transaction.memo,
             transaction.category,
+            row_text(transaction.source_row),
         )
     )
+    if transaction.vendor_name == "Internal Transfer":
+        return False
     if any(term in text for term in ("credit", "deposit", "incoming", "refund", "reversal")):
         return False
     if any(
         term in text
         for term in (
             "internal transfer",
-            "transfer to",
+            "a2a transfer",
             "from share",
             "to share",
             "payment to citibank",
             "payment to capital one",
             "payment to chase",
+            "citi autopay",
         )
     ):
         return False

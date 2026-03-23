@@ -78,7 +78,7 @@ class ApUploadInboxTests(unittest.TestCase):
             current = "reference,date,vendor,amount,account,memo\nc1,2026-03-17,QuickBooks,120.00,Bank,Expanded plan\nc2,2026-03-17,Snowflake,75.00,Bank,New vendor\n"
             (root / "archive" / "20260310T120000Z_transactions.csv").write_text(previous)
             metadata = ap_upload_inbox.store_upload(root, "transactions.csv", current.encode("utf-8"))
-            analysis = ap_upload_inbox.build_archive_analysis(root, metadata)
+            analysis = ap_upload_inbox.build_archive_analysis(root, metadata, {"known_vendor_keys": set(), "clickup": {}, "qbo": {}})
             self.assertTrue(analysis["available"])
             self.assertEqual(analysis["current_transaction_count"], 2)
             self.assertIn("Snowflake", {item["vendor"] for item in analysis["new_charges"]})
@@ -92,11 +92,30 @@ class ApUploadInboxTests(unittest.TestCase):
                 "transactions.csv",
                 b"reference,date,vendor,amount,account,memo\nc1,2026-03-17,QuickBooks,120.00,Bank,Expanded plan\n",
             )
-            analysis = ap_upload_inbox.build_archive_analysis(root, metadata)
+            analysis = ap_upload_inbox.build_archive_analysis(root, metadata, {"known_vendor_keys": set(), "clickup": {}, "qbo": {}})
             self.assertTrue(analysis["available"])
             self.assertFalse(analysis["baseline_ready"])
-            self.assertEqual(analysis["new_charges"], [])
+            self.assertEqual(analysis["new_charges"][0]["classification"], "NEW_UNMAPPED_VENDOR")
             self.assertEqual(analysis["savings_opportunities"], [])
+
+    def test_build_archive_analysis_suppresses_known_vendor_without_history(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            metadata = ap_upload_inbox.store_upload(
+                root,
+                "transactions.csv",
+                b"reference,date,vendor,amount,account,memo\nc1,2026-03-17,QuickBooks,120.00,Bank,Expanded plan\n",
+            )
+            analysis = ap_upload_inbox.build_archive_analysis(
+                root,
+                metadata,
+                {
+                    "known_vendor_keys": {ap_upload_inbox.ap_audit.normalize_key("QuickBooks")},
+                    "clickup": {"connected": True},
+                    "qbo": {"connected": False},
+                },
+            )
+            self.assertEqual(analysis["new_charges"], [])
 
 
 if __name__ == "__main__":

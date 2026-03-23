@@ -199,6 +199,34 @@ class ApAuditTests(unittest.TestCase):
         self.assertEqual(len(alerts), 2)
         self.assertIn("UNKNOWN_REQUIRES_REVIEW", {item["alert_type"] for item in alerts})
 
+    def test_extended_description_is_used_for_vendor_resolution(self):
+        rows = [
+            {
+                "Posting Date": "3/19/2026",
+                "Amount": "-843.14",
+                "Description": "Transfer to Cap",
+                "Extended Description": "Withdrawal ACH A TYPE: Stripe Cap CO: Anata    Entry Class Code: CCD    ACH Trace Number: 7",
+                "Reference Number": "3939486718",
+                "Type": "Retail ACH",
+            }
+        ]
+        transactions = ap_audit.normalize_transactions(rows, self.rules)
+        self.assertEqual(transactions[0].vendor_name, "Stripe Capital")
+
+    def test_internal_a2a_transfer_is_excluded(self):
+        rows = [
+            {
+                "Posting Date": "3/3/2026",
+                "Amount": "-3400.00",
+                "Description": "Withdrawal Home  A2A Transfer: ****5196",
+                "Extended Description": "Withdrawal Home  A2A Transfer: ****5196",
+                "Reference Number": "3910125776",
+                "Type": "Withdrawal",
+            }
+        ]
+        transactions = ap_audit.normalize_transactions(rows, self.rules)
+        self.assertEqual(transactions, [])
+
     def test_build_clickup_update_actions_merges_group_rollups_per_task(self):
         schema_fields = [
             {"id": "amount-field", "name": "Amount*", "type": "currency", "type_config": {}},

@@ -86,6 +86,9 @@ The inbox page also analyzes the uploaded transaction history and surfaces:
 - new charges / unrecognized activity
 - vendor spend growth against the previous uploaded file
 - savings opportunities / aggressive cut candidates
+- connected-system status for ClickUp and QuickBooks vendor sync
+
+Vendor recognition now prefers the richest bank descriptor available, suppresses internal `A2A Transfer` movements, and uses connected ClickUp/QBO vendors to reduce false "new vendor" alerts.
 
 On Render, the upload inbox uses a persistent disk and the cron services fetch from:
 
@@ -102,6 +105,11 @@ Recommended Render env wiring:
   - `AP_SESSION_SECRET`
   - `CLICKUP_API_TOKEN`
   - `CLICKUP_LIST_ID`
+  - `QBO_CLIENT_ID`
+  - `QBO_CLIENT_SECRET`
+  - `QBO_REALM_ID`
+  - `QBO_REFRESH_TOKEN`
+  - `QBO_TOKEN_STORE_PATH=/var/data/ap_upload_inbox/qbo_tokens.json`
   - `AP_UPLOAD_STORAGE_DIR=/var/data/ap_upload_inbox`
 - cron services `anata-ops-ap-daily` and `anata-ops-ap-weekly`
   - `AP_TRANSACTIONS_URL=https://anata-ops-ap-inbox.onrender.com/latest.csv`
@@ -136,6 +144,20 @@ Supported auth/config sources:
 - `AP_TRANSACTIONS_URL`
 - `AP_TRANSACTIONS_AUTH_TOKEN`
 - or equivalent flags: `--clickup-token`, `--clickup-list-id`, `--clickup-view-id`
+
+## QuickBooks Online Vendor Sync
+
+The inbox can enrich vendor normalization from QuickBooks Online so generic bank descriptors are less likely to show up as fake "new vendors".
+
+Configure on the inbox service:
+
+- `QBO_CLIENT_ID`
+- `QBO_CLIENT_SECRET`
+- `QBO_REALM_ID`
+- `QBO_REFRESH_TOKEN`
+- `QBO_TOKEN_STORE_PATH=/var/data/ap_upload_inbox/qbo_tokens.json`
+
+The service refreshes access tokens as needed and persists the latest rotated refresh token to `QBO_TOKEN_STORE_PATH`, which is important because Intuit rotates refresh tokens over time. This currently powers the inbox analysis and vendor matching.
 
 ## Usage
 

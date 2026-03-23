@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlencode
 from wsgiref.simple_server import make_server
 
 import ap_audit
+import qbo_client
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -32,6 +33,8 @@ DEFAULT_MAX_BYTES = 10 * 1024 * 1024
 ACCEPTED_EXTENSIONS = {".csv"}
 SESSION_COOKIE_NAME = "ap_upload_session"
 SESSION_TTL_SECONDS = 12 * 60 * 60
+STATIC_DIR = ROOT_DIR / "static"
+QBO_TOKEN_FILENAME = "qbo_tokens.json"
 
 
 def storage_dir() -> Path:
@@ -86,6 +89,14 @@ def latest_metadata_path(root: Path) -> Path:
 
 def archive_dir(root: Path) -> Path:
     return root / ARCHIVE_DIRNAME
+
+
+def qbo_token_store_path(root: Path) -> Path:
+    return root / QBO_TOKEN_FILENAME
+
+
+def runtime_rules(root: Path) -> Dict[str, Any]:
+    return qbo_client.enrich_rules_with_qbo(ap_audit.load_rules(None), configured_path=qbo_token_store_path(root))
 
 
 def sanitize_filename(filename: str) -> str:
@@ -270,134 +281,16 @@ def page_shell(title: str, eyebrow: str, heading: str, intro: str, status_block:
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{html.escape(title)}</title>
-  <style>
-    :root {{
-      --bg: #f2efe7;
-      --panel: #fffdf7;
-      --ink: #18202a;
-      --muted: #6f726c;
-      --accent: #0e6e58;
-      --accent-2: #c96c31;
-      --line: #d8d0bf;
-    }}
-    * {{ box-sizing: border-box; }}
-    body {{
-      margin: 0;
-      font-family: Georgia, "Times New Roman", serif;
-      color: var(--ink);
-      background:
-        radial-gradient(circle at top left, rgba(201,108,49,.16), transparent 30%),
-        linear-gradient(180deg, #f7f4ec, var(--bg));
-    }}
-    main {{
-      max-width: 860px;
-      margin: 48px auto;
-      padding: 24px;
-    }}
-    .hero {{
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 22px;
-      padding: 28px;
-      box-shadow: 0 18px 50px rgba(24,32,42,.08);
-    }}
-    h1 {{
-      margin: 0 0 10px;
-      font-size: clamp(2rem, 4vw, 3rem);
-      line-height: 1;
-    }}
-    p {{ line-height: 1.5; }}
-    .grid {{
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-      gap: 18px;
-      margin-top: 24px;
-    }}
-    .card {{
-      background: rgba(255,255,255,.88);
-      border: 1px solid var(--line);
-      border-radius: 18px;
-      padding: 20px;
-    }}
-    label {{
-      display: block;
-      margin-bottom: 6px;
-      font-size: 0.95rem;
-      color: var(--muted);
-    }}
-    input[type="text"],
-    input[type="password"],
-    input[type="file"] {{
-      width: 100%;
-      padding: 12px 14px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: #fff;
-      font: inherit;
-    }}
-    button {{
-      appearance: none;
-      border: 0;
-      border-radius: 999px;
-      padding: 12px 18px;
-      background: var(--accent);
-      color: #fff;
-      font: inherit;
-      cursor: pointer;
-      margin-top: 14px;
-    }}
-    .ghost {{
-      background: transparent;
-      border: 1px solid var(--line);
-      color: var(--ink);
-    }}
-    .status {{
-      background: rgba(14,110,88,.08);
-      border-left: 4px solid var(--accent);
-      padding: 12px 14px;
-      border-radius: 12px;
-      margin-top: 18px;
-    }}
-    .hint {{
-      color: var(--muted);
-      margin-top: 0;
-    }}
-    .metric {{
-      margin: 10px 0;
-      padding-bottom: 10px;
-      border-bottom: 1px dashed var(--line);
-    }}
-    .metric strong {{
-      display: block;
-      text-transform: uppercase;
-      letter-spacing: .08em;
-      font-size: .78rem;
-      color: var(--muted);
-      margin-bottom: 4px;
-    }}
-    .toolbar {{
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-      align-items: center;
-      justify-content: space-between;
-    }}
-    .toolbar form {{
-      margin: 0;
-    }}
-    code {{
-      background: rgba(24,32,42,.06);
-      padding: 2px 6px;
-      border-radius: 6px;
-    }}
-  </style>
+  <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main>
-    <section class="hero">
-      <p style="margin:0;color:var(--accent-2);text-transform:uppercase;letter-spacing:.12em;font-size:.78rem;">{html.escape(eyebrow)}</p>
-      <h1>{html.escape(heading)}</h1>
-      <p>{html.escape(intro)}</p>
+  <main class="page-shell">
+    <section class="page-panel">
+      <div class="page-head">
+        <p class="page-eyebrow">{html.escape(eyebrow)}</p>
+        <h1 class="page-title">{html.escape(heading)}</h1>
+        <p class="page-copy">{html.escape(intro)}</p>
+      </div>
       {status_block}
       {body}
     </section>
@@ -407,15 +300,15 @@ def page_shell(title: str, eyebrow: str, heading: str, intro: str, status_block:
 
 
 def login_page(status_message: str) -> str:
-    status_block = f"<p class='status'>{html.escape(status_message)}</p>" if status_message else ""
+    status_block = f"<p class='status-banner'>{html.escape(status_message)}</p>" if status_message else ""
     body = """<div class="grid">
-        <section class="card">
-          <h2 style="margin-top:0;">Admin Login</h2>
+        <section class="card card-form">
+          <h2 class="section-title">Admin Login</h2>
           <p class="hint">Use the AP admin credentials once, then the browser keeps a signed session for future uploads.</p>
           <form action="/login" method="post">
             <label for="username">Username</label>
             <input id="username" name="username" type="text" autocomplete="username">
-            <label for="password" style="margin-top:14px;">Password</label>
+            <label class="label-spaced" for="password">Password</label>
             <input id="password" name="password" type="password" autocomplete="current-password">
             <button type="submit">Sign In</button>
           </form>
@@ -435,7 +328,7 @@ def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: st
     latest_name = html.escape(metadata.get("original_filename", "No file uploaded"))
     latest_uploaded_at = html.escape(format_timestamp(metadata.get("uploaded_at", "")))
     latest_size = metadata.get("byte_size", 0)
-    status_block = f"<p class='status'>{html.escape(status_message)}</p>" if status_message else ""
+    status_block = f"<p class='status-banner'>{html.escape(status_message)}</p>" if status_message else ""
     body = f"""<div class="toolbar">
         <p class="hint">Upload the newest bank-export CSV. The daily and weekly AP audits always fetch the current file from this inbox.</p>
         <form action="/logout" method="post">
@@ -443,8 +336,8 @@ def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: st
         </form>
       </div>
       <div class="grid">
-        <section class="card">
-          <h2 style="margin-top:0;">Upload Current File</h2>
+        <section class="card card-form">
+          <h2 class="section-title">Upload Current File</h2>
           <form action="/upload" method="post" enctype="multipart/form-data">
             <label for="transaction_file">Transactions CSV</label>
             <input id="transaction_file" name="transaction_file" type="file" accept=".csv,text/csv">
@@ -452,7 +345,7 @@ def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: st
           </form>
         </section>
         <section class="card">
-          <h2 style="margin-top:0;">Current File</h2>
+          <h2 class="section-title">Current File</h2>
           <div class="metric"><strong>Filename</strong>{latest_name}</div>
           <div class="metric"><strong>Uploaded At</strong>{latest_uploaded_at}</div>
           <div class="metric"><strong>Size</strong>{latest_size:,} bytes</div>
@@ -475,10 +368,10 @@ def format_money(amount: float) -> str:
     return f"${amount:,.2f}"
 
 
-def load_normalized_transactions(path: Path) -> List[ap_audit.Transaction]:
+def load_normalized_transactions(path: Path, root: Path) -> List[ap_audit.Transaction]:
     if not path.exists():
         return []
-    rules = ap_audit.load_rules(None)
+    rules = runtime_rules(root)
     rows = ap_audit.load_rows(str(path))
     return ap_audit.normalize_transactions(rows, rules)
 
@@ -531,62 +424,114 @@ def vendor_categories(transactions: List[ap_audit.Transaction]) -> Dict[str, str
     return categories
 
 
-def build_archive_analysis(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+def build_connected_systems(root: Path, rules: Dict[str, Any]) -> Dict[str, Any]:
+    qbo_status = qbo_client.connection_status(qbo_token_store_path(root))
+    qbo_known_vendor_keys = {
+        ap_audit.normalize_key(alias)
+        for alias in qbo_client.build_vendor_aliases(qbo_client.fetch_vendors(qbo_token_store_path(root))).values()
+    } if qbo_status.get("connected") else set()
+
+    clickup_token = os.getenv("CLICKUP_API_TOKEN", "").strip()
+    clickup_list_id = os.getenv("CLICKUP_LIST_ID", "").strip()
+    clickup_view_id = os.getenv("CLICKUP_VIEW_ID", "").strip()
+    clickup_status = {
+        "configured": bool(clickup_token and (clickup_list_id or clickup_view_id)),
+        "connected": False,
+        "vendor_count": 0,
+        "message": "ClickUp credentials not configured.",
+    }
+    clickup_known_vendor_keys = set()
+    if clickup_status["configured"]:
+        try:
+            task_rows = ap_audit.fetch_clickup_tasks(clickup_token, clickup_list_id or None, clickup_view_id or None)
+            tasks = ap_audit.normalize_tasks(task_rows, rules)
+            clickup_known_vendor_keys = {
+                ap_audit.normalize_key(task.vendor_name)
+                for task in tasks
+                if task.vendor_name
+            }
+            clickup_status.update(
+                {
+                    "connected": True,
+                    "vendor_count": len(clickup_known_vendor_keys),
+                    "message": "AP vendor sync active.",
+                }
+            )
+        except Exception as exc:
+            clickup_status["message"] = f"ClickUp sync failed: {exc}"
+    return {
+        "known_vendor_keys": clickup_known_vendor_keys | qbo_known_vendor_keys,
+        "clickup": clickup_status,
+        "qbo": qbo_status,
+    }
+
+
+def build_archive_analysis(root: Path, metadata: Dict[str, Any], systems: Dict[str, Any]) -> Dict[str, Any]:
     latest_path = latest_file_path(root)
     if not latest_path.exists():
         return {"available": False}
 
-    current_transactions = filter_recent_transactions(load_normalized_transactions(latest_path))
+    current_transactions = filter_recent_transactions(load_normalized_transactions(latest_path, root))
     current_stored = str(metadata.get("stored_filename", ""))
     history_files = archive_paths(root, current_stored)
     previous_file = history_files[0] if history_files else None
-    previous_transactions = filter_recent_transactions(load_normalized_transactions(previous_file)) if previous_file else []
+    previous_transactions = filter_recent_transactions(load_normalized_transactions(previous_file, root)) if previous_file else []
     history_transactions: List[ap_audit.Transaction] = []
     for path in history_files[:8]:
-        history_transactions.extend(filter_recent_transactions(load_normalized_transactions(path)))
+        history_transactions.extend(filter_recent_transactions(load_normalized_transactions(path, root)))
 
     current_totals = vendor_totals(current_transactions)
     previous_totals = vendor_totals(previous_transactions)
     historical_amounts = vendor_amount_history(history_transactions)
     categories = vendor_categories(current_transactions)
+    known_vendor_keys = set(systems.get("known_vendor_keys", set()))
     vendor_counts: Dict[str, int] = {}
     for transaction in current_transactions:
         vendor_counts[transaction.vendor_name] = vendor_counts.get(transaction.vendor_name, 0) + 1
 
     baseline_ready = bool(history_files)
     new_charges: List[Dict[str, Any]] = []
-    if baseline_ready:
-        for transaction in sorted(current_transactions, key=lambda item: item.amount, reverse=True):
-            history = historical_amounts.get(transaction.vendor_name, [])
-            if not history:
-                new_charges.append(
-                    {
-                        "vendor": transaction.vendor_name,
-                        "amount": transaction.amount,
-                        "date": transaction.date.isoformat() if transaction.date else "",
-                        "reason": "Vendor does not appear in prior uploaded transaction history.",
-                        "classification": "NEW_VENDOR",
-                        "action": "Confirm owner, necessity, and whether this should become a tracked recurring AP item.",
-                    }
-                )
+    for transaction in sorted(current_transactions, key=lambda item: item.amount, reverse=True):
+        history = historical_amounts.get(transaction.vendor_name, [])
+        vendor_key = ap_audit.normalize_key(transaction.vendor_name)
+        vendor_is_known = vendor_key in known_vendor_keys
+        if not history:
+            if vendor_is_known:
                 continue
-            average_amount = sum(history) / len(history)
-            recent_sample = history[:3]
-            if (
-                transaction.amount > average_amount * 1.2
-                and transaction.amount - average_amount > 25
-                and all(abs(transaction.amount - previous) > max(10.0, previous * 0.1) for previous in recent_sample)
-            ):
-                new_charges.append(
-                    {
-                        "vendor": transaction.vendor_name,
-                        "amount": transaction.amount,
-                        "date": transaction.date.isoformat() if transaction.date else "",
-                        "reason": "Amount is materially above the prior observed pattern for this vendor.",
-                        "classification": "NEW_CHARGE_PATTERN",
-                        "action": "Validate the invoice, seats, usage, or plan tier before the next cycle closes.",
-                    }
-                )
+            new_charges.append(
+                {
+                    "vendor": transaction.vendor_name,
+                    "amount": transaction.amount,
+                    "date": transaction.date.isoformat() if transaction.date else "",
+                    "reason": (
+                        "Vendor does not appear in prior uploaded transaction history or the connected AP/QBO vendor set."
+                        if baseline_ready
+                        else "Vendor is not present in the connected ClickUp AP list or QuickBooks vendor set."
+                    ),
+                    "classification": "NEW_VENDOR" if baseline_ready else "NEW_UNMAPPED_VENDOR",
+                    "action": "Confirm owner, necessity, and whether this should become a tracked recurring AP item.",
+                }
+            )
+            continue
+        if not baseline_ready:
+            continue
+        average_amount = sum(history) / len(history)
+        recent_sample = history[:3]
+        if (
+            transaction.amount > average_amount * 1.2
+            and transaction.amount - average_amount > 25
+            and all(abs(transaction.amount - previous) > max(10.0, previous * 0.1) for previous in recent_sample)
+        ):
+            new_charges.append(
+                {
+                    "vendor": transaction.vendor_name,
+                    "amount": transaction.amount,
+                    "date": transaction.date.isoformat() if transaction.date else "",
+                    "reason": "Amount is materially above the prior observed pattern for this vendor.",
+                    "classification": "NEW_CHARGE_PATTERN",
+                    "action": "Validate the invoice, seats, usage, or plan tier before the next cycle closes.",
+                }
+            )
 
     spend_growth: List[Dict[str, Any]] = []
     if baseline_ready:
@@ -669,26 +614,27 @@ def build_archive_analysis(root: Path, metadata: Dict[str, Any]) -> Dict[str, An
         "current_transaction_count": len(current_transactions),
         "historical_upload_count": len(history_files),
         "total_current_spend": round(sum(transaction.amount for transaction in current_transactions), 2),
-        "history_note": "" if baseline_ready else "Need at least one earlier uploaded file before new-charge, growth, and savings comparisons become reliable.",
+        "history_note": "" if baseline_ready else "Growth comparisons need at least one earlier uploaded file. New-charge checks still use live ClickUp and QBO vendors when connected.",
         "new_charges": new_charges[:12],
         "spend_growth": spend_growth[:12],
         "savings_opportunities": deduped_savings[:12],
+        "systems": systems,
     }
 
 
-def run_live_ap_audit(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+def run_live_ap_audit(root: Path, metadata: Dict[str, Any], systems: Dict[str, Any]) -> Dict[str, Any]:
     latest_path = latest_file_path(root)
     if not latest_path.exists():
-        return {"available": False, "message": "No uploaded transaction file is available yet."}
+        return {"available": False, "message": "No uploaded transaction file is available yet.", "systems": systems}
     clickup_token = os.getenv("CLICKUP_API_TOKEN", "").strip()
     clickup_list_id = os.getenv("CLICKUP_LIST_ID", "").strip()
     clickup_view_id = os.getenv("CLICKUP_VIEW_ID", "").strip()
     if not clickup_token or not (clickup_list_id or clickup_view_id):
-        return {"available": False, "message": "Set CLICKUP_API_TOKEN and CLICKUP_LIST_ID on the inbox service to enable live AP urgency analysis."}
+        return {"available": False, "message": "Set CLICKUP_API_TOKEN and CLICKUP_LIST_ID on the inbox service to enable live AP urgency analysis.", "systems": systems}
 
     try:
-        rules = ap_audit.load_rules(None)
-        transactions = filter_recent_transactions(load_normalized_transactions(latest_path))
+        rules = runtime_rules(root)
+        transactions = filter_recent_transactions(load_normalized_transactions(latest_path, root))
         as_of_date = max((transaction.date for transaction in transactions if transaction.date), default=date.today())
         task_rows = ap_audit.fetch_clickup_tasks(clickup_token, clickup_list_id or None, clickup_view_id or None)
         tasks = ap_audit.normalize_tasks(task_rows, rules)
@@ -719,9 +665,10 @@ def run_live_ap_audit(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
             "create_count": len(match_result["create_tasks"]),
             "update_count": len(match_result["update_tasks"]),
             "overdue_count": len(overdue),
+            "systems": systems,
         }
     except Exception as exc:
-        return {"available": False, "message": f"Live AP audit failed: {exc}"}
+        return {"available": False, "message": f"Live AP audit failed: {exc}", "systems": systems}
 
 
 def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str, Any]) -> str:
@@ -741,8 +688,18 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
                 elif isinstance(value, float):
                     value = format_money(value)
                 parts.append(f"<strong>{html.escape(label)}:</strong> {html.escape(str(value))}")
-            rows.append(f"<li>{' | '.join(parts)}</li>")
-        return f"<ul style='padding-left:18px;line-height:1.6'>{''.join(rows)}</ul>"
+            rows.append(f"<li class='detail-item'>{' | '.join(parts)}</li>")
+        return f"<ul class='detail-list'>{''.join(rows)}</ul>"
+
+    def render_system_card(title: str, status: Dict[str, Any]) -> str:
+        badge_class = "badge-good" if status.get("connected") else "badge-warn" if status.get("configured") else "badge-muted"
+        badge_text = "Connected" if status.get("connected") else "Needs setup" if status.get("configured") else "Not configured"
+        return (
+            f"<div class='system-row'>"
+            f"<div><h3 class='system-title'>{html.escape(title)}</h3><p class='hint'>{html.escape(status.get('message', ''))}</p></div>"
+            f"<div class='system-meta'><span class='badge {badge_class}'>{html.escape(badge_text)}</span>"
+            f"<span class='system-count'>{status.get('vendor_count', 0)} vendors</span></div></div>"
+        )
 
     urgent_html = "<p class='hint'>Live AP urgency analysis is not available yet.</p>"
     if live_audit.get("available"):
@@ -764,10 +721,17 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
         if archive_analysis.get("history_note")
         else ""
     )
+    systems = archive_analysis.get("systems") or live_audit.get("systems") or {}
+    systems_html = "".join(
+        [
+            render_system_card("ClickUp AP", systems.get("clickup", {})),
+            render_system_card("QuickBooks Vendors", systems.get("qbo", {})),
+        ]
+    )
     return f"""
-      <div class="grid" style="margin-top:24px;">
+      <div class="grid section-gap">
         <section class="card">
-          <h2 style="margin-top:0;">Analysis Overview</h2>
+          <h2 class="section-title">Analysis Overview</h2>
           <div class="metric"><strong>Current review window spend</strong>{format_money(archive_analysis['total_current_spend'])}</div>
           <div class="metric"><strong>Transactions in review window</strong>{archive_analysis['current_transaction_count']}</div>
           <div class="metric"><strong>Lookback days</strong>{archive_analysis['lookback_days']}</div>
@@ -778,35 +742,42 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
           {baseline_note}
         </section>
         <section class="card">
-          <h2 style="margin-top:0;">Urgent This Week</h2>
+          <h2 class="section-title">Urgent This Week</h2>
           {urgent_html}
         </section>
       </div>
-      <div class="grid" style="margin-top:18px;">
+      <div class="grid section-gap">
         <section class="card">
-          <h2 style="margin-top:0;">New Charges / Unrecognized Activity</h2>
+          <h2 class="section-title">New Charges / Unrecognized Activity</h2>
           <p class="hint">Flagged from the latest uploaded file versus prior uploads and current AP mappings.</p>
           {render_rows(live_new_charges, new_charge_keys)}
         </section>
         <section class="card">
-          <h2 style="margin-top:0;">Spend Growing</h2>
+          <h2 class="section-title">Spend Growing</h2>
           <p class="hint">Compared against the previous uploaded transaction file.</p>
           {render_rows(archive_analysis['spend_growth'], [("Vendor", "vendor"), ("Current", "current_total"), ("Previous", "previous_total"), ("Increase", "delta"), ("Growth", "growth_pct")])}
         </section>
       </div>
-      <div class="grid" style="margin-top:18px;">
+      <div class="grid section-gap">
         <section class="card">
-          <h2 style="margin-top:0;">Savings Opportunities</h2>
+          <h2 class="section-title">Savings Opportunities</h2>
           <p class="hint">Heuristic cut list. Use this to challenge spend aggressively every week.</p>
           {render_rows(archive_analysis['savings_opportunities'], [("Vendor", "vendor"), ("Amount", "amount"), ("Priority", "priority"), ("Reason", "reason"), ("Action", "action")])}
         </section>
         <section class="card">
-          <h2 style="margin-top:0;">AP Audit Snapshot</h2>
+          <h2 class="section-title">AP Audit Snapshot</h2>
           <p class="hint">This uses live ClickUp data when the inbox service has ClickUp credentials configured.</p>
           <div class="metric"><strong>New AP items</strong>{live_audit.get('create_count', 0)}</div>
           <div class="metric"><strong>Existing items to update</strong>{live_audit.get('update_count', 0)}</div>
           <div class="metric"><strong>Overdue review items</strong>{live_audit.get('overdue_count', 0)}</div>
           <div class="metric"><strong>Audit as of</strong>{html.escape(str(live_audit.get('as_of_date', 'Not available')))}</div>
+        </section>
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Connected Systems</h2>
+          <p class="hint">Vendor recognition and audit confidence improve when both AP and accounting systems are connected.</p>
+          <div class="system-grid">{systems_html}</div>
         </section>
       </div>
     """
@@ -886,6 +857,17 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
     query = parse_query_string(environ)
     metadata = current_metadata(root)
 
+    if method == "GET" and path == "/static/style.css":
+        css_path = STATIC_DIR / "style.css"
+        if not css_path.exists():
+            return text_response(start_response, "404 Not Found", "Not Found")
+        return response(
+            start_response,
+            "200 OK",
+            css_path.read_bytes(),
+            [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=300")],
+        )
+
     if method == "GET" and path == "/health":
         return json_response(
             start_response,
@@ -901,8 +883,10 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
     if method == "GET" and path in {"/", "/index.html"}:
         status_message = login_status_message(query)
         if request_is_admin_authenticated(environ):
-            archive_analysis = build_archive_analysis(root, metadata)
-            live_audit = run_live_ap_audit(root, metadata)
+            rules = runtime_rules(root)
+            systems = build_connected_systems(root, rules)
+            archive_analysis = build_archive_analysis(root, metadata, systems)
+            live_audit = run_live_ap_audit(root, metadata, systems)
             body = upload_page(status_message, metadata, render_analysis_html(archive_analysis, live_audit))
         else:
             body = login_page(status_message)

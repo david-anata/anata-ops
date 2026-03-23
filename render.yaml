@@ -6,7 +6,7 @@ services:
     branch: main
     plan: starter
     region: oregon
-    buildCommand: python3 -m py_compile ap_upload_inbox.py ap_audit.py
+    buildCommand: python3 -m py_compile ap_upload_inbox.py ap_audit.py qbo_client.py
     startCommand: python3 ap_upload_inbox.py
     healthCheckPath: /health
     envVars:
@@ -28,6 +28,16 @@ services:
         value: /var/data/ap_upload_inbox
       - key: AP_UPLOAD_MAX_BYTES
         value: "10485760"
+      - key: QBO_CLIENT_ID
+        sync: false
+      - key: QBO_CLIENT_SECRET
+        sync: false
+      - key: QBO_REALM_ID
+        sync: false
+      - key: QBO_REFRESH_TOKEN
+        sync: false
+      - key: QBO_TOKEN_STORE_PATH
+        value: /var/data/ap_upload_inbox/qbo_tokens.json
     disk:
       name: ap-upload-disk
       mountPath: /var/data
