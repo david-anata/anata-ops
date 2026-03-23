@@ -25,9 +25,9 @@ services:
       - key: AP_LOOKBACK_DAYS
         value: "7"
       - key: AP_APPLY_CLICKUP_UPDATES
-        value: "true"
+        value: "false"
       - key: AP_POST_SLACK
-        value: "true"
+        value: "false"
       - key: AP_DATA_DIR
         value: "data"
   - type: cron
@@ -56,9 +56,8 @@ services:
       - key: AP_LOOKBACK_DAYS
         value: "7"
       - key: AP_APPLY_CLICKUP_UPDATES
-        value: "true"
+        value: "false"
       - key: AP_POST_SLACK
-        value: "true"
+        value: "false"
       - key: AP_DATA_DIR
         value: "data"
-
