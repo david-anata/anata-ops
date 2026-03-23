@@ -46,7 +46,7 @@ def resolve_transactions_path() -> str:
         destination = Path(tempfile.gettempdir()) / f"ap_transactions{suffix}"
         urllib.request.urlretrieve(source_url, destination)
         return str(destination)
-    raise SystemExit("Set AP_TRANSACTIONS_PATH or AP_TRANSACTIONS_URL for scheduled audits.")
+    raise FileNotFoundError("Set AP_TRANSACTIONS_PATH or AP_TRANSACTIONS_URL for scheduled audits.")
 
 
 def main() -> None:
@@ -56,7 +56,11 @@ def main() -> None:
         print(f"Skipping {args.mode} audit at {now.isoformat()} outside the target America/Denver window.")
         return
 
-    transactions_path = resolve_transactions_path()
+    try:
+        transactions_path = resolve_transactions_path()
+    except FileNotFoundError as exc:
+        print(f"Skipping {args.mode} audit: {exc}")
+        return
     command = [
         sys.executable,
         str(Path(__file__).resolve().parents[1] / "ap_audit.py"),
