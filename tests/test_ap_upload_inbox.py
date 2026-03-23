@@ -70,6 +70,20 @@ class ApUploadInboxTests(unittest.TestCase):
         suffix = run_scheduled_audit.download_suffix("https://anata-ops-ap-inbox.onrender.com/latest.csv?token=secret")
         self.assertEqual(suffix, ".csv")
 
+    def test_build_archive_analysis_detects_new_vendor_and_growth(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ap_upload_inbox.ensure_storage(root)
+            previous = "reference,date,vendor,amount,account,memo\np1,2026-03-10,QuickBooks,50.00,Bank,Old plan\np2,2026-03-10,Canva,20.00,Bank,Design\n"
+            current = "reference,date,vendor,amount,account,memo\nc1,2026-03-17,QuickBooks,120.00,Bank,Expanded plan\nc2,2026-03-17,Snowflake,75.00,Bank,New vendor\n"
+            (root / "archive" / "20260310T120000Z_transactions.csv").write_text(previous)
+            metadata = ap_upload_inbox.store_upload(root, "transactions.csv", current.encode("utf-8"))
+            analysis = ap_upload_inbox.build_archive_analysis(root, metadata)
+            self.assertTrue(analysis["available"])
+            self.assertEqual(analysis["current_transaction_count"], 2)
+            self.assertIn("Snowflake", {item["vendor"] for item in analysis["new_charges"]})
+            self.assertEqual(analysis["spend_growth"][0]["vendor"], "QuickBooks")
+
 
 if __name__ == "__main__":
     unittest.main()

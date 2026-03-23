@@ -80,6 +80,13 @@ The service stores:
 - upload metadata as `latest.json`
 - archived timestamped copies in `archive/`
 
+The inbox page also analyzes the uploaded transaction history and surfaces:
+
+- urgent AP items when live ClickUp auth is configured
+- new charges / unrecognized activity
+- vendor spend growth against the previous uploaded file
+- savings opportunities / aggressive cut candidates
+
 On Render, the upload inbox uses a persistent disk and the cron services fetch from:
 
 ```text
@@ -93,6 +100,8 @@ Recommended Render env wiring:
   - `AP_ADMIN_USERNAME`
   - `AP_ADMIN_PASSWORD`
   - `AP_SESSION_SECRET`
+  - `CLICKUP_API_TOKEN`
+  - `CLICKUP_LIST_ID`
   - `AP_UPLOAD_STORAGE_DIR=/var/data/ap_upload_inbox`
 - cron services `anata-ops-ap-daily` and `anata-ops-ap-weekly`
   - `AP_TRANSACTIONS_URL=https://anata-ops-ap-inbox.onrender.com/latest.csv`
@@ -234,5 +243,12 @@ Do not store live ClickUp or Slack secrets in repo-tracked files. Set:
 - `AP_ADMIN_USERNAME`
 - `AP_ADMIN_PASSWORD`
 - `AP_SESSION_SECRET`
+
+Daily Slack remains intentionally slim:
+
+- overdue items
+- due in 1 to 2 days
+- partially paid balances still open
+- material new obligations only
 
 If a token has been pasted into chat or terminal history, rotate it immediately and replace it with a fresh secret in your secret manager.

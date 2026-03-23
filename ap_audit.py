@@ -1691,6 +1691,7 @@ def build_weekly_summary(
     overdue: Sequence[Dict[str, Any]],
     warnings: Sequence[Dict[str, Any]],
     exceptions: Sequence[Dict[str, Any]],
+    new_charge_alerts: Sequence[Dict[str, Any]],
     as_of_date: date,
 ) -> Dict[str, Any]:
     partial_task_balances = {
@@ -1710,6 +1711,9 @@ def build_weekly_summary(
         "overdue_review_queue": len(overdue),
         "warnings": len(warnings),
         "exceptions": len(exceptions),
+        "new_charge_alerts": len(new_charge_alerts),
+        "material_new_charge_alerts": sum(1 for item in new_charge_alerts if item["material"]),
+        "unknown_new_charges": sum(1 for item in new_charge_alerts if item["alert_type"] == "UNKNOWN_REQUIRES_REVIEW"),
         "total_due_this_week": round(
             sum(item["remaining_balance"] for item in warnings if parse_date(item["due_date"]) and 0 <= (parse_date(item["due_date"]) - as_of_date).days <= 7),
             2,
@@ -1724,6 +1728,7 @@ def build_leadership_summary(
     weekly_summary: Dict[str, Any],
     warnings: Sequence[Dict[str, Any]],
     overdue: Sequence[Dict[str, Any]],
+    new_charge_alerts: Sequence[Dict[str, Any]],
 ) -> Dict[str, Any]:
     top_cash_items = sorted(warnings, key=lambda item: item["remaining_balance"], reverse=True)[:10]
     return {
@@ -1731,6 +1736,7 @@ def build_leadership_summary(
         "total_due_this_week": weekly_summary["total_due_this_week"],
         "total_overdue": weekly_summary["total_overdue"],
         "total_partial_balances": weekly_summary["total_partial_balances"],
+        "material_new_charges": [item for item in new_charge_alerts if item["material"]][:10],
         "critical_items": [
             {
                 "vendor": item["vendor"],
@@ -1819,6 +1825,87 @@ def build_bookkeeper_action_queue(
     return queue
 
 
+def build_new_charge_alerts(
+    *,
+    transactions: Sequence[Transaction],
+    tasks: Sequence[ClickUpTask],
+    creates: Sequence[Dict[str, Any]],
+    exceptions: Sequence[Dict[str, Any]],
+    material_amount: float,
+) -> List[Dict[str, Any]]:
+    alerts: List[Dict[str, Any]] = []
+    task_vendor_keys = {normalize_key(task.vendor_name) for task in tasks}
+    transaction_by_reference = {transaction.reference: transaction for transaction in transactions}
+
+    for item in creates:
+        vendor_key = normalize_key(item["vendor_name"])
+        transaction = transaction_by_reference.get(item["source_transaction_reference"])
+        if vendor_key in task_vendor_keys:
+            alert_type = "NEW_CHARGE_PATTERN" if item["frequency"] == "Ad Hoc" else "NEW_UNMAPPED_RECURRING_RISK"
+            why_new = "Vendor exists in AP, but this transaction did not reconcile to an active ClickUp item."
+            existing_match = "unclear"
+        else:
+            alert_type = "NEW_VENDOR"
+            why_new = "Vendor does not appear in the current AP dashboard."
+            existing_match = "no"
+        alerts.append(
+            {
+                "vendor": item["vendor_name"],
+                "amount": item["amount_due"],
+                "date": item["due_date"] or item["expected_charge_date"],
+                "alert_type": alert_type,
+                "why_new": why_new,
+                "possible_classification": item["category"],
+                "existing_match_found": existing_match,
+                "recommended_next_action": "Review the charge, confirm whether it should recur, and add or map the AP record before close.",
+                "confidence": item["confidence"],
+                "material": item["amount_due"] >= material_amount,
+                "source_transaction_reference": item["source_transaction_reference"],
+                "memo": transaction.memo if transaction else "",
+            }
+        )
+
+    for item in exceptions:
+        alerts.append(
+            {
+                "vendor": item["vendor"],
+                "amount": item["amount"],
+                "date": item["date"],
+                "alert_type": "UNKNOWN_REQUIRES_REVIEW",
+                "why_new": item["why_unclear"],
+                "possible_classification": "Unknown",
+                "existing_match_found": "unclear",
+                "recommended_next_action": item["recommended_human_review_step"],
+                "confidence": item["confidence"],
+                "material": item["amount"] >= material_amount,
+                "source_transaction_reference": "",
+                "memo": "",
+            }
+        )
+
+    alerts.sort(key=lambda item: (not item["material"], -item["amount"], item["vendor"]))
+    return alerts
+
+
+def slim_daily_slack_warnings(
+    warnings: Sequence[Dict[str, Any]],
+    *,
+    as_of_date: date,
+) -> List[Dict[str, Any]]:
+    urgent: List[Dict[str, Any]] = []
+    for item in warnings:
+        due_date = parse_date(item["due_date"])
+        delta = (due_date - as_of_date).days if due_date else 999
+        ap_state_key = normalize_key(item.get("ap_state", item.get("status", "")))
+        is_overdue = (due_date and due_date < as_of_date) or "overdue" in ap_state_key
+        is_partial = ap_state_key == "partially paid"
+        is_material_new = item["action"] == "Create" and item["level"] in {"CRITICAL", "HIGH"}
+        if is_overdue or delta <= 2 or (is_partial and delta <= 7) or is_material_new:
+            urgent.append(item)
+    urgent.sort(key=lambda item: (warning_rank(item["level"]), item["due_date"] or "", -item["remaining_balance"]))
+    return urgent[:12]
+
+
 def build_slack_payload(
     *,
     mode: str,
@@ -1827,12 +1914,13 @@ def build_slack_payload(
     warnings: Sequence[Dict[str, Any]],
 ) -> Dict[str, Any]:
     if mode == "daily":
+        as_of = parse_date(weekly_summary["as_of_date"])
+        slim_items = slim_daily_slack_warnings(warnings, as_of_date=as_of) if as_of else list(warnings)
         buckets = {
-            "overdue review needed": [item for item in warnings if parse_date(item["due_date"]) and parse_date(item["due_date"]) < parse_date(weekly_summary["as_of_date"])],
-            "due in 1-2 days": [item for item in warnings if parse_date(item["due_date"]) and 0 <= (parse_date(item["due_date"]) - parse_date(weekly_summary["as_of_date"])).days <= 2],
-            "due in 3-5 days": [item for item in warnings if parse_date(item["due_date"]) and 3 <= (parse_date(item["due_date"]) - parse_date(weekly_summary["as_of_date"])).days <= 5],
-            "partial balances still open": [item for item in warnings if normalize_key(item.get("ap_state", "")) == "partially paid"],
-            "material new obligations found by audit": [item for item in warnings if item["action"] == "Create" and item["amount_due"] >= MATERIAL_WARNING_AMOUNT],
+            "overdue review needed": [item for item in slim_items if parse_date(item["due_date"]) and parse_date(item["due_date"]) < parse_date(weekly_summary["as_of_date"])],
+            "due in 1-2 days": [item for item in slim_items if parse_date(item["due_date"]) and 0 <= (parse_date(item["due_date"]) - parse_date(weekly_summary["as_of_date"])).days <= 2],
+            "partial balances still open": [item for item in slim_items if normalize_key(item.get("ap_state", "")) == "partially paid"],
+            "material new obligations found by audit": [item for item in slim_items if item["action"] == "Create" and item["level"] in {"CRITICAL", "HIGH"}],
         }
         sections = [
             {
@@ -1851,7 +1939,7 @@ def build_slack_payload(
             for title, items in buckets.items()
             if items
         ]
-        text = "\n".join(item["message"] for item in warnings) if warnings else "No AP items due, overdue, partial, or materially new today."
+        text = "\n".join(item["message"] for item in slim_items) if slim_items else "No urgent AP items today."
         return {"mode": mode, "text": text, "sections": sections}
 
     summary_line = (
@@ -1884,6 +1972,7 @@ def render_report(
     overdue: Sequence[Dict[str, Any]],
     warnings: Sequence[Dict[str, Any]],
     exceptions: Sequence[Dict[str, Any]],
+    new_charge_alerts: Sequence[Dict[str, Any]],
     improvements: Sequence[str],
     weekly_summary: Dict[str, Any],
     leadership_summary: Dict[str, Any],
@@ -1909,6 +1998,9 @@ def render_report(
         f"- overdue review count: {len(overdue)}",
         f"- upcoming warning count: {len(warnings)}",
         f"- unclear review count: {unclear_count}",
+        f"- new charge alerts: {weekly_summary['new_charge_alerts']}",
+        f"- material new charges: {weekly_summary['material_new_charge_alerts']}",
+        f"- unknown new charges requiring review: {weekly_summary['unknown_new_charges']}",
         f"- total upcoming obligations: ${total_upcoming:.2f}",
         f"- total overdue obligations: ${total_overdue:.2f}",
         f"- total partially paid remaining balances: ${total_partial_remaining:.2f}",
@@ -2031,6 +2123,10 @@ def render_report(
             lines.append(
                 f"- {item['vendor']} | due {item['due_date']} | remaining ${item['remaining_balance']:.2f} | action {item['action']} | level {item['level']}"
             )
+        for item in leadership_summary["material_new_charges"][:10]:
+            lines.append(
+                f"- material new charge | {item['vendor']} | ${item['amount']:.2f} | {item['date']} | {item['alert_type']}"
+            )
         lines.extend(["", "SECTION 10: BOOKKEEPER ACTION QUEUE"])
         for item in bookkeeper_action_queue:
             lines.append(
@@ -2047,6 +2143,7 @@ def build_payload(
     overdue: Sequence[Dict[str, Any]],
     warnings: Sequence[Dict[str, Any]],
     exceptions: Sequence[Dict[str, Any]],
+    new_charge_alerts: Sequence[Dict[str, Any]],
     weekly_summary: Dict[str, Any],
     leadership_summary: Dict[str, Any],
     bookkeeper_action_queue: Sequence[Dict[str, Any]],
@@ -2061,6 +2158,7 @@ def build_payload(
         "overdue_reviews": list(overdue),
         "slack_warnings": list(warnings),
         "exceptions": list(exceptions),
+        "new_charge_alerts": list(new_charge_alerts),
         "weekly_summary": weekly_summary,
         "leadership_summary": leadership_summary,
         "bookkeeper_action_queue": list(bookkeeper_action_queue),
@@ -2116,6 +2214,13 @@ def main() -> None:
         args.mode,
         material_amount,
     )
+    new_charge_alerts = build_new_charge_alerts(
+        transactions=transactions,
+        tasks=tasks,
+        creates=match_result["create_tasks"],
+        exceptions=match_result["exceptions"],
+        material_amount=material_amount,
+    )
     schema_summary = inspect_clickup_schema(schema_fields, schema_manifest) if schema_fields and schema_manifest else {}
     clickup_actions = build_clickup_update_actions(tasks, match_result["update_tasks"], match_result["grouped_rollups"], schema_fields, as_of_date) if schema_fields else {"actions": [], "skipped": []}
     weekly_summary = build_weekly_summary(
@@ -2127,12 +2232,14 @@ def main() -> None:
         overdue=overdue,
         warnings=warnings,
         exceptions=match_result["exceptions"],
+        new_charge_alerts=new_charge_alerts,
         as_of_date=as_of_date,
     )
     leadership_summary = build_leadership_summary(
         weekly_summary=weekly_summary,
         warnings=warnings,
         overdue=overdue,
+        new_charge_alerts=new_charge_alerts,
     )
     bookkeeper_action_queue = build_bookkeeper_action_queue(
         match_result["create_tasks"],
@@ -2162,6 +2269,7 @@ def main() -> None:
         overdue=overdue,
         warnings=warnings,
         exceptions=match_result["exceptions"],
+        new_charge_alerts=new_charge_alerts,
         improvements=improvements,
         weekly_summary=weekly_summary,
         leadership_summary=leadership_summary,
@@ -2175,6 +2283,7 @@ def main() -> None:
         overdue,
         warnings,
         match_result["exceptions"],
+        new_charge_alerts,
         weekly_summary,
         leadership_summary,
         bookkeeper_action_queue,

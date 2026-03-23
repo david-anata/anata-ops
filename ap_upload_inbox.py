@@ -11,14 +11,16 @@ import json
 import os
 import re
 import shutil
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.parser import BytesParser
 from email.policy import default
 from http.cookies import SimpleCookie
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from urllib.parse import parse_qs, urlencode
 from wsgiref.simple_server import make_server
+
+import ap_audit
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -429,7 +431,7 @@ def login_page(status_message: str) -> str:
     )
 
 
-def upload_page(status_message: str, metadata: Dict[str, Any]) -> str:
+def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: str = "") -> str:
     latest_name = html.escape(metadata.get("original_filename", "No file uploaded"))
     latest_uploaded_at = html.escape(format_timestamp(metadata.get("uploaded_at", "")))
     latest_size = metadata.get("byte_size", 0)
@@ -457,7 +459,8 @@ def upload_page(status_message: str, metadata: Dict[str, Any]) -> str:
           <p><a href="/latest.csv">Download current transactions CSV</a></p>
           <p class="hint">Cron jobs read <code>/latest.csv</code> using the machine token, but admins can also download it directly while logged in.</p>
         </section>
-      </div>"""
+      </div>
+      {analysis_html}"""
     return page_shell(
         title="Anata AP Upload Inbox",
         eyebrow="Anata AP Intake",
@@ -466,6 +469,311 @@ def upload_page(status_message: str, metadata: Dict[str, Any]) -> str:
         status_block=status_block,
         body=body,
     )
+
+
+def format_money(amount: float) -> str:
+    return f"${amount:,.2f}"
+
+
+def load_normalized_transactions(path: Path) -> List[ap_audit.Transaction]:
+    if not path.exists():
+        return []
+    rules = ap_audit.load_rules(None)
+    rows = ap_audit.load_rows(str(path))
+    return ap_audit.normalize_transactions(rows, rules)
+
+
+def archive_paths(root: Path, current_stored_filename: str) -> List[Path]:
+    paths = sorted(archive_dir(root).glob("*.csv"), key=lambda item: item.stat().st_mtime, reverse=True)
+    return [path for path in paths if path.name != current_stored_filename]
+
+
+def vendor_totals(transactions: List[ap_audit.Transaction]) -> Dict[str, float]:
+    totals: Dict[str, float] = {}
+    for transaction in transactions:
+        totals[transaction.vendor_name] = round(totals.get(transaction.vendor_name, 0.0) + transaction.amount, 2)
+    return totals
+
+
+def vendor_amount_history(transactions: List[ap_audit.Transaction]) -> Dict[str, List[float]]:
+    history: Dict[str, List[float]] = {}
+    for transaction in transactions:
+        history.setdefault(transaction.vendor_name, []).append(transaction.amount)
+    return history
+
+
+def vendor_categories(transactions: List[ap_audit.Transaction]) -> Dict[str, str]:
+    categories: Dict[str, str] = {}
+    for transaction in transactions:
+        categories.setdefault(transaction.vendor_name, transaction.category or "Uncategorized")
+    return categories
+
+
+def build_archive_analysis(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    latest_path = latest_file_path(root)
+    if not latest_path.exists():
+        return {"available": False}
+
+    current_transactions = load_normalized_transactions(latest_path)
+    current_stored = str(metadata.get("stored_filename", ""))
+    history_files = archive_paths(root, current_stored)
+    previous_file = history_files[0] if history_files else None
+    previous_transactions = load_normalized_transactions(previous_file) if previous_file else []
+    history_transactions: List[ap_audit.Transaction] = []
+    for path in history_files[:8]:
+        history_transactions.extend(load_normalized_transactions(path))
+
+    current_totals = vendor_totals(current_transactions)
+    previous_totals = vendor_totals(previous_transactions)
+    historical_amounts = vendor_amount_history(history_transactions)
+    categories = vendor_categories(current_transactions)
+    vendor_counts: Dict[str, int] = {}
+    for transaction in current_transactions:
+        vendor_counts[transaction.vendor_name] = vendor_counts.get(transaction.vendor_name, 0) + 1
+
+    new_charges: List[Dict[str, Any]] = []
+    for transaction in sorted(current_transactions, key=lambda item: item.amount, reverse=True):
+        history = historical_amounts.get(transaction.vendor_name, [])
+        if not history:
+            new_charges.append(
+                {
+                    "vendor": transaction.vendor_name,
+                    "amount": transaction.amount,
+                    "date": transaction.date.isoformat() if transaction.date else "",
+                    "reason": "Vendor does not appear in prior uploaded transaction history.",
+                    "classification": "NEW_VENDOR",
+                    "action": "Confirm owner, necessity, and whether this should become a tracked recurring AP item.",
+                }
+            )
+            continue
+        average_amount = sum(history) / len(history)
+        recent_sample = history[:3]
+        if (
+            transaction.amount > average_amount * 1.2
+            and transaction.amount - average_amount > 25
+            and all(abs(transaction.amount - previous) > max(10.0, previous * 0.1) for previous in recent_sample)
+        ):
+            new_charges.append(
+                {
+                    "vendor": transaction.vendor_name,
+                    "amount": transaction.amount,
+                    "date": transaction.date.isoformat() if transaction.date else "",
+                    "reason": "Amount is materially above the prior observed pattern for this vendor.",
+                    "classification": "NEW_CHARGE_PATTERN",
+                    "action": "Validate the invoice, seats, usage, or plan tier before the next cycle closes.",
+                }
+            )
+
+    spend_growth: List[Dict[str, Any]] = []
+    for vendor, current_total in current_totals.items():
+        previous_total = previous_totals.get(vendor, 0.0)
+        if previous_total > 0 and current_total > previous_total * 1.15 and current_total - previous_total > 25:
+            spend_growth.append(
+                {
+                    "vendor": vendor,
+                    "current_total": current_total,
+                    "previous_total": previous_total,
+                    "delta": round(current_total - previous_total, 2),
+                    "growth_pct": round(((current_total - previous_total) / previous_total) * 100, 1),
+                    "category": categories.get(vendor, "Uncategorized"),
+                }
+            )
+    spend_growth.sort(key=lambda item: item["delta"], reverse=True)
+
+    savings_opportunities: List[Dict[str, Any]] = []
+    for item in spend_growth:
+        if item["category"] in {"Software", "Marketing", "Operations"}:
+            savings_opportunities.append(
+                {
+                    "vendor": item["vendor"],
+                    "amount": item["current_total"],
+                    "reason": f"Spend increased {item['growth_pct']:.1f}% versus the previous uploaded period.",
+                    "action": "Review plan tier, seats, downgrade options, or cancellation immediately.",
+                    "priority": "High",
+                }
+            )
+    for item in new_charges:
+        if categories.get(item["vendor"], "Uncategorized") in {"Software", "Marketing", "Operations"}:
+            savings_opportunities.append(
+                {
+                    "vendor": item["vendor"],
+                    "amount": item["amount"],
+                    "reason": "New operating spend detected before recurrence is established.",
+                    "action": "Challenge ownership and approve only if it survives a savings review.",
+                    "priority": "High" if item["amount"] >= 100 else "Medium",
+                }
+            )
+    for vendor, count in sorted(vendor_counts.items(), key=lambda entry: entry[1], reverse=True):
+        total = current_totals[vendor]
+        category = categories.get(vendor, "Uncategorized")
+        if count > 1 and category in {"Software", "Marketing"}:
+            savings_opportunities.append(
+                {
+                    "vendor": vendor,
+                    "amount": total,
+                    "reason": "Multiple charges from the same vendor landed in the current period.",
+                    "action": "Check for duplicate subscriptions, split plans, or overlapping seats.",
+                    "priority": "Medium",
+                }
+            )
+        if category == "Software" and total <= 50:
+            savings_opportunities.append(
+                {
+                    "vendor": vendor,
+                    "amount": total,
+                    "reason": "Low-dollar software line item may be easy to remove with little disruption.",
+                    "action": "Confirm active usage and cut aggressively if no clear owner exists.",
+                    "priority": "Medium",
+                }
+            )
+
+    deduped_savings: List[Dict[str, Any]] = []
+    seen_pairs = set()
+    for item in savings_opportunities:
+        key = (item["vendor"], item["action"])
+        if key in seen_pairs:
+            continue
+        seen_pairs.add(key)
+        deduped_savings.append(item)
+
+    return {
+        "available": True,
+        "current_transaction_count": len(current_transactions),
+        "historical_upload_count": len(history_files),
+        "total_current_spend": round(sum(transaction.amount for transaction in current_transactions), 2),
+        "new_charges": new_charges[:12],
+        "spend_growth": spend_growth[:12],
+        "savings_opportunities": deduped_savings[:12],
+    }
+
+
+def run_live_ap_audit(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    latest_path = latest_file_path(root)
+    if not latest_path.exists():
+        return {"available": False, "message": "No uploaded transaction file is available yet."}
+    clickup_token = os.getenv("CLICKUP_API_TOKEN", "").strip()
+    clickup_list_id = os.getenv("CLICKUP_LIST_ID", "").strip()
+    clickup_view_id = os.getenv("CLICKUP_VIEW_ID", "").strip()
+    if not clickup_token or not (clickup_list_id or clickup_view_id):
+        return {"available": False, "message": "Set CLICKUP_API_TOKEN and CLICKUP_LIST_ID on the inbox service to enable live AP urgency analysis."}
+
+    try:
+        rules = ap_audit.load_rules(None)
+        transactions = load_normalized_transactions(latest_path)
+        as_of_date = max((transaction.date for transaction in transactions if transaction.date), default=date.today())
+        task_rows = ap_audit.fetch_clickup_tasks(clickup_token, clickup_list_id or None, clickup_view_id or None)
+        tasks = ap_audit.normalize_tasks(task_rows, rules)
+        match_result = ap_audit.find_matches(transactions, tasks, rules, as_of_date)
+        overdue = ap_audit.overdue_reviews(tasks, transactions, match_result["matched_transactions"], as_of_date)
+        material_amount = rules.get("material_warning_amount", ap_audit.MATERIAL_WARNING_AMOUNT)
+        warnings = ap_audit.build_slack_warnings(
+            tasks,
+            match_result["update_tasks"],
+            match_result["create_tasks"],
+            as_of_date,
+            "daily",
+            material_amount,
+        )
+        urgent_items = ap_audit.slim_daily_slack_warnings(warnings, as_of_date=as_of_date)
+        new_charge_alerts = ap_audit.build_new_charge_alerts(
+            transactions=transactions,
+            tasks=tasks,
+            creates=match_result["create_tasks"],
+            exceptions=match_result["exceptions"],
+            material_amount=material_amount,
+        )
+        return {
+            "available": True,
+            "as_of_date": as_of_date.isoformat(),
+            "urgent_items": urgent_items,
+            "new_charge_alerts": new_charge_alerts[:10],
+            "create_count": len(match_result["create_tasks"]),
+            "update_count": len(match_result["update_tasks"]),
+            "overdue_count": len(overdue),
+        }
+    except Exception as exc:
+        return {"available": False, "message": f"Live AP audit failed: {exc}"}
+
+
+def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str, Any]) -> str:
+    if not archive_analysis.get("available"):
+        return ""
+
+    def render_rows(items: List[Dict[str, Any]], keys: List[Tuple[str, str]]) -> str:
+        if not items:
+            return "<p class='hint'>None right now.</p>"
+        rows = []
+        for item in items:
+            parts = []
+            for label, key in keys:
+                value = item.get(key, "")
+                if isinstance(value, float) and key.endswith("_pct"):
+                    value = f"{value:.1f}%"
+                elif isinstance(value, float):
+                    value = format_money(value)
+                parts.append(f"<strong>{html.escape(label)}:</strong> {html.escape(str(value))}")
+            rows.append(f"<li>{' | '.join(parts)}</li>")
+        return f"<ul style='padding-left:18px;line-height:1.6'>{''.join(rows)}</ul>"
+
+    urgent_html = "<p class='hint'>Live AP urgency analysis is not available yet.</p>"
+    if live_audit.get("available"):
+        urgent_html = render_rows(
+            live_audit["urgent_items"],
+            [("Vendor", "vendor"), ("Due", "due_date"), ("Remaining", "remaining_balance"), ("Action", "action"), ("Level", "level")],
+        )
+    elif live_audit.get("message"):
+        urgent_html = f"<p class='hint'>{html.escape(live_audit['message'])}</p>"
+
+    live_new_charges = live_audit["new_charge_alerts"] if live_audit.get("available") else archive_analysis["new_charges"]
+    new_charge_keys = (
+        [("Vendor", "vendor"), ("Amount", "amount"), ("Date", "date"), ("Type", "alert_type"), ("Action", "recommended_next_action")]
+        if live_audit.get("available")
+        else [("Vendor", "vendor"), ("Amount", "amount"), ("Date", "date"), ("Type", "classification"), ("Action", "action")]
+    )
+    return f"""
+      <div class="grid" style="margin-top:24px;">
+        <section class="card">
+          <h2 style="margin-top:0;">Analysis Overview</h2>
+          <div class="metric"><strong>Current uploaded spend</strong>{format_money(archive_analysis['total_current_spend'])}</div>
+          <div class="metric"><strong>Transactions in latest upload</strong>{archive_analysis['current_transaction_count']}</div>
+          <div class="metric"><strong>Prior uploads available</strong>{archive_analysis['historical_upload_count']}</div>
+          <div class="metric"><strong>New charges flagged</strong>{len(archive_analysis['new_charges'])}</div>
+          <div class="metric"><strong>Spend growth flags</strong>{len(archive_analysis['spend_growth'])}</div>
+          <div class="metric"><strong>Savings opportunities</strong>{len(archive_analysis['savings_opportunities'])}</div>
+        </section>
+        <section class="card">
+          <h2 style="margin-top:0;">Urgent This Week</h2>
+          {urgent_html}
+        </section>
+      </div>
+      <div class="grid" style="margin-top:18px;">
+        <section class="card">
+          <h2 style="margin-top:0;">New Charges / Unrecognized Activity</h2>
+          <p class="hint">Flagged from the latest uploaded file versus prior uploads and current AP mappings.</p>
+          {render_rows(live_new_charges, new_charge_keys)}
+        </section>
+        <section class="card">
+          <h2 style="margin-top:0;">Spend Growing</h2>
+          <p class="hint">Compared against the previous uploaded transaction file.</p>
+          {render_rows(archive_analysis['spend_growth'], [("Vendor", "vendor"), ("Current", "current_total"), ("Previous", "previous_total"), ("Increase", "delta"), ("Growth", "growth_pct")])}
+        </section>
+      </div>
+      <div class="grid" style="margin-top:18px;">
+        <section class="card">
+          <h2 style="margin-top:0;">Savings Opportunities</h2>
+          <p class="hint">Heuristic cut list. Use this to challenge spend aggressively every week.</p>
+          {render_rows(archive_analysis['savings_opportunities'], [("Vendor", "vendor"), ("Amount", "amount"), ("Priority", "priority"), ("Reason", "reason"), ("Action", "action")])}
+        </section>
+        <section class="card">
+          <h2 style="margin-top:0;">AP Audit Snapshot</h2>
+          <p class="hint">This uses live ClickUp data when the inbox service has ClickUp credentials configured.</p>
+          <div class="metric"><strong>New AP items</strong>{live_audit.get('create_count', 0)}</div>
+          <div class="metric"><strong>Existing items to update</strong>{live_audit.get('update_count', 0)}</div>
+          <div class="metric"><strong>Overdue review items</strong>{live_audit.get('overdue_count', 0)}</div>
+          <div class="metric"><strong>Audit as of</strong>{html.escape(str(live_audit.get('as_of_date', 'Not available')))}</div>
+        </section>
+      </div>
+    """
 
 
 def latest_download_url(environ: Dict[str, Any], token: str) -> str:
@@ -557,7 +865,9 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
     if method == "GET" and path in {"/", "/index.html"}:
         status_message = login_status_message(query)
         if request_is_admin_authenticated(environ):
-            body = upload_page(status_message, metadata)
+            archive_analysis = build_archive_analysis(root, metadata)
+            live_audit = run_live_ap_audit(root, metadata)
+            body = upload_page(status_message, metadata, render_analysis_html(archive_analysis, live_audit))
         else:
             body = login_page(status_message)
         return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")

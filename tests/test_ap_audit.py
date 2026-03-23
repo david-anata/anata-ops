@@ -105,8 +105,9 @@ class ApAuditTests(unittest.TestCase):
 
     def test_build_payload_includes_extended_sections(self):
         weekly_summary = {"as_of_date": "2026-03-23"}
-        leadership_summary = {"as_of_date": "2026-03-23", "critical_items": []}
+        leadership_summary = {"as_of_date": "2026-03-23", "critical_items": [], "material_new_charges": []}
         payload = ap_audit.build_payload(
+            [],
             [],
             [],
             [],
@@ -125,10 +126,11 @@ class ApAuditTests(unittest.TestCase):
         self.assertIn("bookkeeper_action_queue", payload)
         self.assertIn("clickup_update_actions", payload)
         self.assertIn("slack_payload", payload)
+        self.assertIn("new_charge_alerts", payload)
 
     def test_daily_slack_payload_groups_sections(self):
         weekly_summary = {"as_of_date": "2026-03-23"}
-        leadership_summary = {"critical_items": []}
+        leadership_summary = {"critical_items": [], "material_new_charges": []}
         warnings = [
             {
                 "vendor": "Test Vendor",
@@ -149,6 +151,53 @@ class ApAuditTests(unittest.TestCase):
         )
         self.assertEqual(payload["mode"], "daily")
         self.assertTrue(payload["sections"])
+
+    def test_slim_daily_slack_warnings_excludes_non_urgent_items(self):
+        warnings = [
+            {
+                "vendor": "Due Soon",
+                "amount_due": 100.0,
+                "remaining_balance": 100.0,
+                "due_date": "2026-03-24",
+                "action": "Pay",
+                "level": "HIGH",
+                "ap_state": "Due This Week",
+                "status": "Due This Week",
+            },
+            {
+                "vendor": "Not Urgent",
+                "amount_due": 50.0,
+                "remaining_balance": 50.0,
+                "due_date": "2026-03-30",
+                "action": "Pay",
+                "level": "MEDIUM",
+                "ap_state": "Upcoming",
+                "status": "Upcoming",
+            },
+        ]
+        slim = ap_audit.slim_daily_slack_warnings(warnings, as_of_date=date(2026, 3, 23))
+        self.assertEqual([item["vendor"] for item in slim], ["Due Soon"])
+
+    def test_build_new_charge_alerts_includes_creates_and_exceptions(self):
+        alerts = ap_audit.build_new_charge_alerts(
+            transactions=self.transactions,
+            tasks=self.tasks,
+            creates=[ap_audit.build_create_task(self.transactions[0], self.rules, self.as_of_date)],
+            exceptions=[
+                {
+                    "vendor": "AMZN",
+                    "amount": 122.87,
+                    "date": "2026-03-22",
+                    "possible_matches": ["Ops task"],
+                    "why_unclear": "descriptor is ambiguous",
+                    "recommended_human_review_step": "check memo",
+                    "confidence": 0.6,
+                }
+            ],
+            material_amount=500.0,
+        )
+        self.assertEqual(len(alerts), 2)
+        self.assertIn("UNKNOWN_REQUIRES_REVIEW", {item["alert_type"] for item in alerts})
 
     def test_build_clickup_update_actions_merges_group_rollups_per_task(self):
         schema_fields = [

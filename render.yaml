@@ -6,7 +6,7 @@ services:
     branch: main
     plan: starter
     region: oregon
-    buildCommand: python3 -m py_compile ap_upload_inbox.py
+    buildCommand: python3 -m py_compile ap_upload_inbox.py ap_audit.py
     startCommand: python3 ap_upload_inbox.py
     healthCheckPath: /health
     envVars:
@@ -17,6 +17,12 @@ services:
       - key: AP_ADMIN_PASSWORD
         sync: false
       - key: AP_SESSION_SECRET
+        sync: false
+      - key: CLICKUP_API_TOKEN
+        sync: false
+      - key: CLICKUP_LIST_ID
+        value: "901104880724"
+      - key: CLICKUP_VIEW_ID
         sync: false
       - key: AP_UPLOAD_STORAGE_DIR
         value: /var/data/ap_upload_inbox
