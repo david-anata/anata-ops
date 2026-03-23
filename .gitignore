@@ -8,4 +8,5 @@ __pycache__/
 data/*.csv
 data/*.tsv
 data/*.json
+/data/upload_inbox/
 !/data/.gitkeep

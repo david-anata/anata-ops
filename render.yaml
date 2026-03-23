@@ -1,4 +1,25 @@
 services:
+  - type: web
+    name: anata-ops-ap-inbox
+    runtime: python
+    repo: https://github.com/david-anata/anata-ops.git
+    branch: main
+    plan: starter
+    region: oregon
+    buildCommand: python3 -m py_compile ap_upload_inbox.py
+    startCommand: python3 ap_upload_inbox.py
+    healthCheckPath: /health
+    envVars:
+      - key: AP_UPLOAD_TOKEN
+        sync: false
+      - key: AP_UPLOAD_STORAGE_DIR
+        value: /var/data/ap_upload_inbox
+      - key: AP_UPLOAD_MAX_BYTES
+        value: "10485760"
+    disk:
+      name: ap-upload-disk
+      mountPath: /var/data
+      sizeGB: 5
   - type: cron
     name: anata-ops-ap-daily
     runtime: python
@@ -18,10 +39,10 @@ services:
         sync: false
       - key: SLACK_WEBHOOK_URL
         sync: false
-      - key: AP_TRANSACTIONS_PATH
+      - key: AP_TRANSACTIONS_AUTH_TOKEN
         sync: false
       - key: AP_TRANSACTIONS_URL
-        sync: false
+        value: https://anata-ops-ap-inbox.onrender.com/latest.csv
       - key: AP_LOOKBACK_DAYS
         value: "7"
       - key: AP_APPLY_CLICKUP_UPDATES
@@ -49,10 +70,10 @@ services:
         sync: false
       - key: SLACK_WEBHOOK_URL
         sync: false
-      - key: AP_TRANSACTIONS_PATH
+      - key: AP_TRANSACTIONS_AUTH_TOKEN
         sync: false
       - key: AP_TRANSACTIONS_URL
-        sync: false
+        value: https://anata-ops-ap-inbox.onrender.com/latest.csv
       - key: AP_LOOKBACK_DAYS
         value: "7"
       - key: AP_APPLY_CLICKUP_UPDATES

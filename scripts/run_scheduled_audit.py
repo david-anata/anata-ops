@@ -11,6 +11,7 @@ import tempfile
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 
@@ -36,15 +37,31 @@ def within_schedule_window(mode: str, now: datetime) -> bool:
     return now.weekday() == 0 and now.hour == 8 and now.minute == 30
 
 
+def download_suffix(source_url: str) -> str:
+    parsed = urlparse(source_url)
+    suffix = Path(parsed.path).suffix
+    return suffix or ".csv"
+
+
+def download_transactions(source_url: str, destination: Path) -> None:
+    headers = {}
+    auth_token = os.getenv("AP_TRANSACTIONS_AUTH_TOKEN", "").strip()
+    if auth_token:
+        headers["Authorization"] = f"Bearer {auth_token}"
+    request = urllib.request.Request(source_url, headers=headers)
+    with urllib.request.urlopen(request) as response:
+        destination.write_bytes(response.read())
+
+
 def resolve_transactions_path() -> str:
     direct_path = os.getenv("AP_TRANSACTIONS_PATH")
     if direct_path:
         return direct_path
     source_url = os.getenv("AP_TRANSACTIONS_URL")
     if source_url:
-        suffix = Path(source_url).suffix or ".csv"
+        suffix = download_suffix(source_url)
         destination = Path(tempfile.gettempdir()) / f"ap_transactions{suffix}"
-        urllib.request.urlretrieve(source_url, destination)
+        download_transactions(source_url, destination)
         return str(destination)
     raise FileNotFoundError("Set AP_TRANSACTIONS_PATH or AP_TRANSACTIONS_URL for scheduled audits.")
 
