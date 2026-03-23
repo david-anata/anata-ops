@@ -483,6 +483,28 @@ def load_normalized_transactions(path: Path) -> List[ap_audit.Transaction]:
     return ap_audit.normalize_transactions(rows, rules)
 
 
+def analysis_lookback_days() -> int:
+    raw = os.getenv("AP_INBOX_LOOKBACK_DAYS", "7").strip()
+    try:
+        return max(int(raw), 1)
+    except ValueError:
+        return 7
+
+
+def filter_recent_transactions(
+    transactions: List[ap_audit.Transaction],
+    *,
+    lookback_days: Optional[int] = None,
+) -> List[ap_audit.Transaction]:
+    dated = [transaction for transaction in transactions if transaction.date]
+    if not dated:
+        return list(transactions)
+    anchor = max(transaction.date for transaction in dated if transaction.date)  # type: ignore[arg-type]
+    window = lookback_days or analysis_lookback_days()
+    start_ord = anchor.toordinal() - max(window - 1, 0)
+    return [transaction for transaction in transactions if not transaction.date or transaction.date.toordinal() >= start_ord]
+
+
 def archive_paths(root: Path, current_stored_filename: str) -> List[Path]:
     paths = sorted(archive_dir(root).glob("*.csv"), key=lambda item: item.stat().st_mtime, reverse=True)
     return [path for path in paths if path.name != current_stored_filename]
@@ -514,14 +536,14 @@ def build_archive_analysis(root: Path, metadata: Dict[str, Any]) -> Dict[str, An
     if not latest_path.exists():
         return {"available": False}
 
-    current_transactions = load_normalized_transactions(latest_path)
+    current_transactions = filter_recent_transactions(load_normalized_transactions(latest_path))
     current_stored = str(metadata.get("stored_filename", ""))
     history_files = archive_paths(root, current_stored)
     previous_file = history_files[0] if history_files else None
-    previous_transactions = load_normalized_transactions(previous_file) if previous_file else []
+    previous_transactions = filter_recent_transactions(load_normalized_transactions(previous_file)) if previous_file else []
     history_transactions: List[ap_audit.Transaction] = []
     for path in history_files[:8]:
-        history_transactions.extend(load_normalized_transactions(path))
+        history_transactions.extend(filter_recent_transactions(load_normalized_transactions(path)))
 
     current_totals = vendor_totals(current_transactions)
     previous_totals = vendor_totals(previous_transactions)
@@ -531,78 +553,82 @@ def build_archive_analysis(root: Path, metadata: Dict[str, Any]) -> Dict[str, An
     for transaction in current_transactions:
         vendor_counts[transaction.vendor_name] = vendor_counts.get(transaction.vendor_name, 0) + 1
 
+    baseline_ready = bool(history_files)
     new_charges: List[Dict[str, Any]] = []
-    for transaction in sorted(current_transactions, key=lambda item: item.amount, reverse=True):
-        history = historical_amounts.get(transaction.vendor_name, [])
-        if not history:
-            new_charges.append(
-                {
-                    "vendor": transaction.vendor_name,
-                    "amount": transaction.amount,
-                    "date": transaction.date.isoformat() if transaction.date else "",
-                    "reason": "Vendor does not appear in prior uploaded transaction history.",
-                    "classification": "NEW_VENDOR",
-                    "action": "Confirm owner, necessity, and whether this should become a tracked recurring AP item.",
-                }
-            )
-            continue
-        average_amount = sum(history) / len(history)
-        recent_sample = history[:3]
-        if (
-            transaction.amount > average_amount * 1.2
-            and transaction.amount - average_amount > 25
-            and all(abs(transaction.amount - previous) > max(10.0, previous * 0.1) for previous in recent_sample)
-        ):
-            new_charges.append(
-                {
-                    "vendor": transaction.vendor_name,
-                    "amount": transaction.amount,
-                    "date": transaction.date.isoformat() if transaction.date else "",
-                    "reason": "Amount is materially above the prior observed pattern for this vendor.",
-                    "classification": "NEW_CHARGE_PATTERN",
-                    "action": "Validate the invoice, seats, usage, or plan tier before the next cycle closes.",
-                }
-            )
+    if baseline_ready:
+        for transaction in sorted(current_transactions, key=lambda item: item.amount, reverse=True):
+            history = historical_amounts.get(transaction.vendor_name, [])
+            if not history:
+                new_charges.append(
+                    {
+                        "vendor": transaction.vendor_name,
+                        "amount": transaction.amount,
+                        "date": transaction.date.isoformat() if transaction.date else "",
+                        "reason": "Vendor does not appear in prior uploaded transaction history.",
+                        "classification": "NEW_VENDOR",
+                        "action": "Confirm owner, necessity, and whether this should become a tracked recurring AP item.",
+                    }
+                )
+                continue
+            average_amount = sum(history) / len(history)
+            recent_sample = history[:3]
+            if (
+                transaction.amount > average_amount * 1.2
+                and transaction.amount - average_amount > 25
+                and all(abs(transaction.amount - previous) > max(10.0, previous * 0.1) for previous in recent_sample)
+            ):
+                new_charges.append(
+                    {
+                        "vendor": transaction.vendor_name,
+                        "amount": transaction.amount,
+                        "date": transaction.date.isoformat() if transaction.date else "",
+                        "reason": "Amount is materially above the prior observed pattern for this vendor.",
+                        "classification": "NEW_CHARGE_PATTERN",
+                        "action": "Validate the invoice, seats, usage, or plan tier before the next cycle closes.",
+                    }
+                )
 
     spend_growth: List[Dict[str, Any]] = []
-    for vendor, current_total in current_totals.items():
-        previous_total = previous_totals.get(vendor, 0.0)
-        if previous_total > 0 and current_total > previous_total * 1.15 and current_total - previous_total > 25:
-            spend_growth.append(
-                {
-                    "vendor": vendor,
-                    "current_total": current_total,
-                    "previous_total": previous_total,
-                    "delta": round(current_total - previous_total, 2),
-                    "growth_pct": round(((current_total - previous_total) / previous_total) * 100, 1),
-                    "category": categories.get(vendor, "Uncategorized"),
-                }
-            )
+    if baseline_ready:
+        for vendor, current_total in current_totals.items():
+            previous_total = previous_totals.get(vendor, 0.0)
+            if previous_total > 0 and current_total > previous_total * 1.15 and current_total - previous_total > 25:
+                spend_growth.append(
+                    {
+                        "vendor": vendor,
+                        "current_total": current_total,
+                        "previous_total": previous_total,
+                        "delta": round(current_total - previous_total, 2),
+                        "growth_pct": round(((current_total - previous_total) / previous_total) * 100, 1),
+                        "category": categories.get(vendor, "Uncategorized"),
+                    }
+                )
     spend_growth.sort(key=lambda item: item["delta"], reverse=True)
 
     savings_opportunities: List[Dict[str, Any]] = []
-    for item in spend_growth:
-        if item["category"] in {"Software", "Marketing", "Operations"}:
-            savings_opportunities.append(
-                {
-                    "vendor": item["vendor"],
-                    "amount": item["current_total"],
-                    "reason": f"Spend increased {item['growth_pct']:.1f}% versus the previous uploaded period.",
-                    "action": "Review plan tier, seats, downgrade options, or cancellation immediately.",
-                    "priority": "High",
-                }
-            )
-    for item in new_charges:
-        if categories.get(item["vendor"], "Uncategorized") in {"Software", "Marketing", "Operations"}:
-            savings_opportunities.append(
-                {
-                    "vendor": item["vendor"],
-                    "amount": item["amount"],
-                    "reason": "New operating spend detected before recurrence is established.",
-                    "action": "Challenge ownership and approve only if it survives a savings review.",
-                    "priority": "High" if item["amount"] >= 100 else "Medium",
-                }
-            )
+    if baseline_ready:
+        for item in spend_growth:
+            if item["category"] in {"Software", "Marketing", "Operations"}:
+                savings_opportunities.append(
+                    {
+                        "vendor": item["vendor"],
+                        "amount": item["current_total"],
+                        "reason": f"Spend increased {item['growth_pct']:.1f}% versus the previous uploaded period.",
+                        "action": "Review plan tier, seats, downgrade options, or cancellation immediately.",
+                        "priority": "High",
+                    }
+                )
+        for item in new_charges:
+            if categories.get(item["vendor"], "Uncategorized") in {"Software", "Marketing", "Operations"}:
+                savings_opportunities.append(
+                    {
+                        "vendor": item["vendor"],
+                        "amount": item["amount"],
+                        "reason": "New operating spend detected before recurrence is established.",
+                        "action": "Challenge ownership and approve only if it survives a savings review.",
+                        "priority": "High" if item["amount"] >= 100 else "Medium",
+                    }
+                )
     for vendor, count in sorted(vendor_counts.items(), key=lambda entry: entry[1], reverse=True):
         total = current_totals[vendor]
         category = categories.get(vendor, "Uncategorized")
@@ -638,9 +664,12 @@ def build_archive_analysis(root: Path, metadata: Dict[str, Any]) -> Dict[str, An
 
     return {
         "available": True,
+        "baseline_ready": baseline_ready,
+        "lookback_days": analysis_lookback_days(),
         "current_transaction_count": len(current_transactions),
         "historical_upload_count": len(history_files),
         "total_current_spend": round(sum(transaction.amount for transaction in current_transactions), 2),
+        "history_note": "" if baseline_ready else "Need at least one earlier uploaded file before new-charge, growth, and savings comparisons become reliable.",
         "new_charges": new_charges[:12],
         "spend_growth": spend_growth[:12],
         "savings_opportunities": deduped_savings[:12],
@@ -659,7 +688,7 @@ def run_live_ap_audit(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
 
     try:
         rules = ap_audit.load_rules(None)
-        transactions = load_normalized_transactions(latest_path)
+        transactions = filter_recent_transactions(load_normalized_transactions(latest_path))
         as_of_date = max((transaction.date for transaction in transactions if transaction.date), default=date.today())
         task_rows = ap_audit.fetch_clickup_tasks(clickup_token, clickup_list_id or None, clickup_view_id or None)
         tasks = ap_audit.normalize_tasks(task_rows, rules)
@@ -730,16 +759,23 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
         if live_audit.get("available")
         else [("Vendor", "vendor"), ("Amount", "amount"), ("Date", "date"), ("Type", "classification"), ("Action", "action")]
     )
+    baseline_note = (
+        f"<p class='hint'>{html.escape(archive_analysis['history_note'])}</p>"
+        if archive_analysis.get("history_note")
+        else ""
+    )
     return f"""
       <div class="grid" style="margin-top:24px;">
         <section class="card">
           <h2 style="margin-top:0;">Analysis Overview</h2>
-          <div class="metric"><strong>Current uploaded spend</strong>{format_money(archive_analysis['total_current_spend'])}</div>
-          <div class="metric"><strong>Transactions in latest upload</strong>{archive_analysis['current_transaction_count']}</div>
+          <div class="metric"><strong>Current review window spend</strong>{format_money(archive_analysis['total_current_spend'])}</div>
+          <div class="metric"><strong>Transactions in review window</strong>{archive_analysis['current_transaction_count']}</div>
+          <div class="metric"><strong>Lookback days</strong>{archive_analysis['lookback_days']}</div>
           <div class="metric"><strong>Prior uploads available</strong>{archive_analysis['historical_upload_count']}</div>
           <div class="metric"><strong>New charges flagged</strong>{len(archive_analysis['new_charges'])}</div>
           <div class="metric"><strong>Spend growth flags</strong>{len(archive_analysis['spend_growth'])}</div>
           <div class="metric"><strong>Savings opportunities</strong>{len(archive_analysis['savings_opportunities'])}</div>
+          {baseline_note}
         </section>
         <section class="card">
           <h2 style="margin-top:0;">Urgent This Week</h2>

@@ -84,6 +84,20 @@ class ApUploadInboxTests(unittest.TestCase):
             self.assertIn("Snowflake", {item["vendor"] for item in analysis["new_charges"]})
             self.assertEqual(analysis["spend_growth"][0]["vendor"], "QuickBooks")
 
+    def test_build_archive_analysis_suppresses_growth_without_history(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            metadata = ap_upload_inbox.store_upload(
+                root,
+                "transactions.csv",
+                b"reference,date,vendor,amount,account,memo\nc1,2026-03-17,QuickBooks,120.00,Bank,Expanded plan\n",
+            )
+            analysis = ap_upload_inbox.build_archive_analysis(root, metadata)
+            self.assertTrue(analysis["available"])
+            self.assertFalse(analysis["baseline_ready"])
+            self.assertEqual(analysis["new_charges"], [])
+            self.assertEqual(analysis["savings_opportunities"], [])
+
 
 if __name__ == "__main__":
     unittest.main()
