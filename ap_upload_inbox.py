@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import html
 import json
+import mimetypes
 import os
 import re
 import shutil
@@ -284,14 +285,21 @@ def page_shell(title: str, eyebrow: str, heading: str, intro: str, status_block:
   <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
-  <main class="page-shell">
-    <section class="page-panel">
-      <div class="page-head">
-        <p class="page-eyebrow">{html.escape(eyebrow)}</p>
-        <h1 class="page-title">{html.escape(heading)}</h1>
-        <p class="page-copy">{html.escape(intro)}</p>
+  <main class="deck ap-shell">
+    <div class="deck-toolbar">
+      <div class="brand-toolbar">
+        <span class="brand-wordmark">
+          <img src="/static/wordmark.png" alt="Anata" class="brand-image">
+        </span>
       </div>
+    </div>
+    <section class="slide slide-cover ap-hero">
+      <p class="eyebrow">{html.escape(eyebrow)}</p>
+      <h1>{html.escape(heading)}</h1>
+      <p class="lead ap-lead">{html.escape(intro)}</p>
       {status_block}
+    </section>
+    <section class="slide ap-workspace">
       {body}
     </section>
   </main>
@@ -855,15 +863,18 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
     query = parse_query_string(environ)
     metadata = current_metadata(root)
 
-    if method == "GET" and path == "/static/style.css":
-        css_path = STATIC_DIR / "style.css"
-        if not css_path.exists():
+    if method == "GET" and path.startswith("/static/"):
+        asset_path = (STATIC_DIR / path.removeprefix("/static/")).resolve()
+        if STATIC_DIR.resolve() not in asset_path.parents and asset_path != STATIC_DIR.resolve():
             return text_response(start_response, "404 Not Found", "Not Found")
+        if not asset_path.exists() or not asset_path.is_file():
+            return text_response(start_response, "404 Not Found", "Not Found")
+        content_type, _ = mimetypes.guess_type(str(asset_path))
         return response(
             start_response,
             "200 OK",
-            css_path.read_bytes(),
-            [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=300")],
+            asset_path.read_bytes(),
+            [("Content-Type", content_type or "application/octet-stream"), ("Cache-Control", "public, max-age=300")],
         )
 
     if method == "GET" and path == "/health":
