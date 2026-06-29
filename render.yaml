@@ -6,7 +6,7 @@ services:
     branch: main
     plan: starter
     region: oregon
-    buildCommand: python3 -m py_compile ap_upload_inbox.py ap_audit.py qbo_client.py
+    buildCommand: python3 -m py_compile ap_upload_inbox.py ap_audit.py qbo_client.py hubspot_sales.py
     startCommand: python3 ap_upload_inbox.py
     healthCheckPath: /health
     envVars:
@@ -38,6 +38,20 @@ services:
         sync: false
       - key: QBO_TOKEN_STORE_PATH
         value: /var/data/ap_upload_inbox/qbo_tokens.json
+      - key: HUBSPOT_PRIVATE_APP_TOKEN
+        sync: false
+      - key: HUBSPOT_PORTAL_ID
+        sync: false
+      - key: HUBSPOT_DEFAULT_DEAL_PIPELINE
+        sync: false
+      - key: HUBSPOT_DEFAULT_DEAL_STAGE
+        sync: false
+      - key: HUBSPOT_DEFAULT_OWNER_ID
+        sync: false
+      - key: HUBSPOT_DEFAULT_SERVICE_LINE
+        value: fulfillment
+      - key: HUBSPOT_DEFAULT_LEAD_SOURCE_DETAIL
+        sync: false
     disk:
       name: ap-upload-disk
       mountPath: /var/data
