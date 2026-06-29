@@ -375,6 +375,21 @@ class ApUploadInboxTests(unittest.TestCase):
                 status, headers, body = call_app("/latest.csv?token=anything")
                 self.assertEqual(status, "401 Unauthorized")
 
+    def test_health_reports_token_presence_without_exposing_token(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {
+                **ADMIN_ENV,
+                "AP_UPLOAD_STORAGE_DIR": str(Path(tmpdir) / "uploads"),
+                "AP_UPLOAD_TOKEN": "machine-secret",
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                status, headers, body = call_app("/health")
+            self.assertEqual(status, "200 OK")
+            payload = json.loads(body.decode("utf-8"))
+            self.assertTrue(payload["machine_token_configured"])
+            self.assertNotIn("machine-secret", json.dumps(payload))
+            self.assertEqual(payload["machine_download_url"], "http://localhost/latest.csv")
+
     def test_upload_post_requires_admin_session_before_parsing_body(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             env = {**ADMIN_ENV, "AP_UPLOAD_STORAGE_DIR": str(Path(tmpdir) / "uploads")}

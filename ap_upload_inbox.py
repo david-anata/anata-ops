@@ -2718,7 +2718,8 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
                 "ok": True,
                 "admin_login_enabled": admin_login_enabled(),
                 "latest_upload": metadata,
-                "machine_download_url": latest_download_url(environ, machine_token()) if machine_token() else latest_download_url(environ, ""),
+                "machine_download_url": latest_download_url(environ, ""),
+                "machine_token_configured": bool(machine_token()),
             },
         )
 
