@@ -92,6 +92,48 @@ class ApUploadInboxTests(unittest.TestCase):
             self.assertTrue(ap_upload_inbox.token_is_valid("expected"))
             self.assertFalse(ap_upload_inbox.token_is_valid("wrong"))
 
+    def test_admin_readonly_token_allows_get_smoke_checks_without_admin_login(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env = {
+                "ANATA_ADMIN_READONLY_TOKEN": "readonly-secret",
+                "AP_ADMIN_USERNAME": "",
+                "AP_ADMIN_PASSWORD": "",
+                "AP_SESSION_SECRET": "",
+                "AP_UPLOAD_STORAGE_DIR": str(root / "uploads"),
+                "WEBSITE_OPS_DIR": str(root / "website-ops"),
+                "SUPPORT_AGENT_REPORTS_DIR": str(root / "support-reports"),
+            }
+            with mock.patch.dict(os.environ, env, clear=False):
+                status, headers, body = call_app(
+                    "/website-ops/queue",
+                    environ_overrides={"HTTP_AUTHORIZATION": "Bearer readonly-secret"},
+                )
+            self.assertEqual(status, "200 OK")
+            self.assertIn(b"Open Work Queue", body)
+
+    def test_admin_readonly_token_does_not_authorize_post_writes(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env = {
+                **ADMIN_ENV,
+                "ANATA_ADMIN_READONLY_TOKEN": "readonly-secret",
+                "AP_UPLOAD_STORAGE_DIR": str(root / "uploads"),
+                "WEBSITE_OPS_DIR": str(root / "website-ops"),
+                "SUPPORT_AGENT_REPORTS_DIR": str(root / "support-reports"),
+            }
+            body = b"category=UX&summary=Smoke"
+            with mock.patch.dict(os.environ, env, clear=False):
+                status, headers, response_body = call_app(
+                    "/website-ops/feedback",
+                    method="POST",
+                    body=body,
+                    content_type="application/x-www-form-urlencoded",
+                    environ_overrides={"HTTP_AUTHORIZATION": "Bearer readonly-secret"},
+                )
+            self.assertEqual(status, "303 See Other")
+            self.assertEqual(headers["Location"], "/?status=unauthorized")
+
     def test_signed_session_round_trip_validates(self):
         with mock.patch.dict(
             os.environ,
