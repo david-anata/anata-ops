@@ -1,0 +1,63 @@
+{
+  "schema_version": "1.0",
+  "pipeline_name": "anata_shared_sales",
+  "source_of_truth": "hubspot",
+  "description": "Shared commercial pipeline for Amazon Marketing Service, Fulfillment, Shipping OS, and Anata Intelligence.",
+  "stages": [
+    {
+      "id": "new_lead",
+      "label": "New Lead",
+      "definition": "A prospect who has never been in the pipeline before."
+    },
+    {
+      "id": "contacted",
+      "label": "Contacted",
+      "definition": "A response has been received back from the new lead."
+    },
+    {
+      "id": "qualified",
+      "label": "Qualified",
+      "definition": "The lead has been qualified as a prospect that can be offered a service or software."
+    },
+    {
+      "id": "audit_or_deck_in_progress",
+      "label": "Audit Or Deck In Progress",
+      "definition": "The team is preparing the proposal deck and audit."
+    },
+    {
+      "id": "proposal_ready",
+      "label": "Proposal Ready",
+      "definition": "The proposal deck and audit have been created and not yet sent."
+    },
+    {
+      "id": "proposal_sent",
+      "label": "Proposal Sent",
+      "definition": "The proposal has been sent."
+    },
+    {
+      "id": "negotiation",
+      "label": "Negotiation",
+      "definition": "The deck has been reviewed with the client and the opportunity is in discussion."
+    },
+    {
+      "id": "closed_won",
+      "label": "Closed Won",
+      "definition": "The client was won and is entering onboarding."
+    },
+    {
+      "id": "closed_lost",
+      "label": "Closed Lost",
+      "definition": "The prospect clearly said no and is no longer interested."
+    },
+    {
+      "id": "nurture",
+      "label": "Nurture",
+      "definition": "There is no defined no and the opportunity should move into a follow-up track."
+    }
+  ],
+  "offer_rules": {
+    "one_primary_offer_per_deal": true,
+    "create_linked_deal_on_second_offer_detection": true,
+    "ads_audit_is_marketing_hook_only": true
+  }
+}

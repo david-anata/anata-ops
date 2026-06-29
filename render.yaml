@@ -6,7 +6,7 @@ services:
     branch: main
     plan: starter
     region: oregon
-    buildCommand: python3 -m py_compile ap_upload_inbox.py ap_audit.py qbo_client.py hubspot_sales.py
+    buildCommand: python3 -m py_compile ap_upload_inbox.py ap_audit.py qbo_client.py hubspot_sales.py hubspot_sales_os.py
     startCommand: python3 ap_upload_inbox.py
     healthCheckPath: /health
     envVars:
@@ -54,6 +54,16 @@ services:
         value: fulfillment
       - key: HUBSPOT_DEFAULT_LEAD_SOURCE_DETAIL
         sync: false
+      - key: ANATA_AGENT_HIGH_CONFIDENCE_THRESHOLD
+        value: "0.85"
+      - key: ANATA_AGENT_MEDIUM_CONFIDENCE_THRESHOLD
+        value: "0.65"
+      - key: ANATA_AGENT_DUPLICATE_SEND_WINDOW_MINUTES
+        value: "240"
+      - key: ANATA_AGENT_OUTBOUND_EMAIL_ENABLED
+        value: "false"
+      - key: ANATA_AGENT_LINKED_DEAL_CREATION_ENABLED
+        value: "true"
     disk:
       name: ap-upload-disk
       mountPath: /var/data

@@ -1,0 +1,32 @@
+{
+  "schema_version": "1.0",
+  "autonomy_mode": "high_confidence_only",
+  "agent_can": [
+    "create_deal",
+    "update_deal_stage",
+    "update_deal_amount",
+    "create_linked_deal",
+    "update_internal_notes",
+    "create_follow_up_task",
+    "send_outbound_message",
+    "update_artifact_status"
+  ],
+  "when_not_confident": [
+    "write_internal_note",
+    "create_internal_follow_up_task"
+  ],
+  "external_communication": {
+    "allowed": true,
+    "voice_source": "user_tone",
+    "channels": [
+      "hubspot",
+      "agent.anatainc.com"
+    ],
+    "must_prevent_duplicate_send": true
+  },
+  "state_change_logging": {
+    "write_reasoning_note_on_stage_change": true,
+    "write_reasoning_note_on_amount_change": true,
+    "write_reasoning_note_on_linked_deal_creation": true
+  }
+}

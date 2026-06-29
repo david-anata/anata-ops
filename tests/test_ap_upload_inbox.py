@@ -8,6 +8,7 @@ from unittest import mock
 
 import ap_upload_inbox
 import hubspot_sales
+import hubspot_sales_os
 import support_agent
 from scripts import run_scheduled_audit
 
@@ -389,6 +390,52 @@ class ApUploadInboxTests(unittest.TestCase):
             self.assertTrue(payload["machine_token_configured"])
             self.assertNotIn("machine-secret", json.dumps(payload))
             self.assertEqual(payload["machine_download_url"], "http://localhost/latest.csv")
+
+    def test_sales_dashboard_json_route_returns_snapshot(self):
+        snapshot = {
+            "portalId": "12345",
+            "summary": {"openDeals": 2},
+            "pipeline": {"label": "Shared Sales"},
+        }
+        with mock.patch.dict(os.environ, ADMIN_ENV, clear=False), mock.patch.object(
+            hubspot_sales_os, "get_sales_dashboard_snapshot", return_value=snapshot
+        ):
+            status, headers, body = call_app(
+                "/admin/api/sales/dashboard",
+                environ_overrides=admin_cookie_environ(),
+                accept="application/json",
+            )
+        self.assertEqual(status, "200 OK")
+        payload = json.loads(body.decode("utf-8"))
+        self.assertTrue(payload["ok"])
+        self.assertEqual(payload["snapshot"]["portalId"], "12345")
+
+    def test_sales_writeback_json_route_returns_result(self):
+        payload = {"mode": "preview", "limit": 5}
+        result = {
+            "mode": "preview",
+            "summary": {"candidateDeals": 1, "appliedActions": 0, "deferredActions": 2},
+            "deals": [],
+        }
+        snapshot = {"summary": {"openDeals": 3}}
+        with mock.patch.dict(os.environ, ADMIN_ENV, clear=False), mock.patch.object(
+            hubspot_sales_os, "run_writeback", return_value=result
+        ) as run_mock, mock.patch.object(
+            hubspot_sales_os, "get_sales_dashboard_snapshot", return_value=snapshot
+        ):
+            status, headers, body = call_app(
+                "/admin/api/sales/writeback",
+                method="POST",
+                body=json.dumps(payload).encode("utf-8"),
+                content_type="application/json",
+                accept="application/json",
+                environ_overrides=admin_cookie_environ(),
+            )
+        self.assertEqual(status, "200 OK")
+        response = json.loads(body.decode("utf-8"))
+        self.assertTrue(response["ok"])
+        self.assertEqual(response["result"]["summary"]["candidateDeals"], 1)
+        run_mock.assert_called_once()
 
     def test_upload_post_requires_admin_session_before_parsing_body(self):
         with tempfile.TemporaryDirectory() as tmpdir:

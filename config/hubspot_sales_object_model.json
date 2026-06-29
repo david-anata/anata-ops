@@ -1,0 +1,82 @@
+{
+  "schema_version": "1.0",
+  "objects": {
+    "contact": {
+      "system_of_record": "hubspot",
+      "required_for_deal_creation": false,
+      "required_fields": [
+        "name_or_firstname",
+        "email_or_phone"
+      ]
+    },
+    "company": {
+      "system_of_record": "hubspot",
+      "required_for_deal_creation": true,
+      "required_fields": [
+        "name"
+      ]
+    },
+    "deal": {
+      "system_of_record": "hubspot",
+      "required_for_deal_creation": true,
+      "required_fields": [
+        "company",
+        "contact",
+        "service_interest",
+        "source",
+        "owner"
+      ],
+      "rules": {
+        "commercial_truth_owner": true,
+        "one_primary_offer_only": true,
+        "create_second_linked_deal_on_second_offer_detection": true
+      }
+    },
+    "deck": {
+      "system_of_record": "agent.anatainc.com",
+      "share_type": "live_link",
+      "can_belong_to_multiple_deals": true
+    },
+    "audit": {
+      "system_of_record": "agent.anatainc.com",
+      "ads_audit_belongs_to_exactly_one_deal": true
+    },
+    "quote": {
+      "system_of_record": "hubspot",
+      "enabled_now": false,
+      "create_when": "pricing_roughly_known"
+    },
+    "task": {
+      "system_of_record": "agent_and_hubspot",
+      "create_when_confidence_is_insufficient": true
+    },
+    "communication": {
+      "system_of_record": "hubspot",
+      "agent_reads_for_state_changes": true,
+      "agent_can_reply_in_user_voice": true
+    }
+  },
+  "classification": {
+    "offers": [
+      {
+        "id": "amazon_marketing_service",
+        "type": "service"
+      },
+      {
+        "id": "fulfillment",
+        "type": "service"
+      },
+      {
+        "id": "shipping_os",
+        "type": "software"
+      },
+      {
+        "id": "anata_intelligence",
+        "type": "software"
+      }
+    ],
+    "sales_hooks": [
+      "ads_audit"
+    ]
+  }
+}

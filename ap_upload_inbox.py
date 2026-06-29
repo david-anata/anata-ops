@@ -23,6 +23,7 @@ from wsgiref.simple_server import make_server
 
 import ap_audit
 import hubspot_sales
+import hubspot_sales_os
 import qbo_client
 import support_agent
 
@@ -466,6 +467,11 @@ def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: st
     status_block = f"<p class='status-banner'>{html.escape(status_message)}</p>" if status_message else ""
     body = f"""<div class="toolbar">
         <p class="hint">Upload the newest bank-export CSV. The daily and weekly AP audits always fetch the current file from this inbox.</p>
+        <div class="ops-nav">
+          <a href="/admin/sales/">Sales OS</a>
+          <a href="/website-ops/">Website Ops</a>
+          <a href="{html.escape(fulfillment_cs_base_path(), quote=True)}/">Fulfillment CS</a>
+        </div>
         <form action="/logout" method="post">
           <button class="ghost" type="submit">Log Out</button>
         </form>
@@ -2236,10 +2242,11 @@ def support_agent_not_found_page(message: str) -> str:
 def sales_nav() -> str:
     return """
       <div class="toolbar">
-        <p class="hint">HubSpot-backed commercial workflows. Deal creation is live; quote and deck creation remain guarded.</p>
+        <p class="hint">HubSpot is the source of truth. This operator layer reads the live pipeline and applies only high-confidence changes.</p>
         <div class="ops-nav">
           <a href="/admin/sales/">Sales OS</a>
           <a href="/admin/sales/deals/create">Create Deal</a>
+          <a href="/admin/api/sales/dashboard">Sales API</a>
           <a href="/admin/fulfillment-cs/">Fulfillment CS</a>
           <a href="/">AP Inbox</a>
         </div>
@@ -2258,29 +2265,261 @@ def sales_status_message(query: Dict[str, str]) -> str:
         return "Deal creation request was incomplete."
     if status == "hubspot-error":
         return "HubSpot rejected or failed the request."
+    if status == "writeback-previewed":
+        return "Sales write-back preview generated."
+    if status == "writeback-applied":
+        return "High-confidence sales write-back actions were applied."
     return ""
 
 
-def sales_dashboard_page(status_message: str) -> str:
+def _format_sales_money(amount: Optional[float]) -> str:
+    if amount is None:
+        return "Missing"
+    return f"${amount:,.0f}"
+
+
+def _format_sales_relative_timestamp(value: str) -> str:
+    if not value:
+        return "Unknown"
+    try:
+        current = datetime.now(timezone.utc)
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return format_timestamp(value)
+    delta = current - parsed.astimezone(timezone.utc)
+    if delta < timedelta(hours=24):
+        return f"{max(int(delta.total_seconds() // 3600), 0)}h ago"
+    return f"{max(delta.days, 0)}d ago"
+
+
+def _sales_badge(status: str) -> str:
+    normalized = str(status).strip().lower()
+    if normalized in {"won", "applied", "healthy", "live"}:
+        badge_class = "badge-good"
+    elif normalized in {"lost", "critical", "blocked"}:
+        badge_class = "badge-warn"
+    else:
+        badge_class = "badge-muted"
+    return f"<span class='badge {badge_class}'>{html.escape(status)}</span>"
+
+
+def _sales_stage_markup(snapshot: Dict[str, Any]) -> str:
+    stages = snapshot.get("pipeline", {}).get("stages", [])
+    cards = []
+    for stage in stages:
+        if not isinstance(stage, dict):
+            continue
+        cards.append(
+            f"""
+              <article class="report-card">
+                <p class="eyebrow">{html.escape(str(stage.get('status', 'open')).title())}</p>
+                <h3>{html.escape(str(stage.get('label', 'Unknown stage')))}</h3>
+                <p class="muted">{int(stage.get('dealCount', 0) or 0)} deal(s) · {_format_sales_money(float(stage.get('totalAmount', 0) or 0))}</p>
+                <p>{int(stage.get('needsAttentionCount', 0) or 0)} need attention in this stage.</p>
+              </article>
+            """
+        )
+    return "".join(cards) or "<p class='hint'>No live pipeline stages were returned.</p>"
+
+
+def _sales_object_definition_markup(snapshot: Dict[str, Any]) -> str:
+    object_definitions = snapshot.get("objectDefinitions", {})
+    cards = []
+    for object_name in ("contact", "company", "deal", "deck", "audit", "quote", "task", "communication"):
+        definition = object_definitions.get(object_name, {})
+        if not isinstance(definition, dict):
+            continue
+        fields = definition.get("required_fields", [])
+        rules = definition.get("rules", {})
+        notes = []
+        if fields:
+            notes.append(f"Required: {', '.join(str(field) for field in fields)}")
+        if "system_of_record" in definition:
+            notes.append(f"Source: {definition['system_of_record']}")
+        if rules:
+            enabled_rules = [key.replace("_", " ") for key, enabled in rules.items() if enabled]
+            if enabled_rules:
+                notes.append(f"Rules: {', '.join(enabled_rules)}")
+        if "create_when" in definition:
+            notes.append(f"Create when: {definition['create_when']}")
+        cards.append(
+            f"""
+              <article class="report-card">
+                <p class="eyebrow">{html.escape(object_name.title())}</p>
+                <h3>{html.escape(object_name.title())}</h3>
+                <p>{html.escape(' · '.join(notes) if notes else 'Definition captured with no extra notes yet.')}</p>
+              </article>
+            """
+        )
+    return "".join(cards) or "<p class='hint'>Object definitions are not available.</p>"
+
+
+def _sales_recent_deals_markup(snapshot: Dict[str, Any]) -> str:
+    deals = snapshot.get("recentDeals", [])
+    if not deals:
+        return "<p class='hint'>No recent deals were returned from HubSpot.</p>"
+    cards = []
+    for deal in deals:
+        if not isinstance(deal, dict):
+            continue
+        missing_fields = deal.get("missingFields", [])
+        missing_text = ", ".join(str(field) for field in missing_fields) if missing_fields else "No critical gaps detected."
+        next_step = str(deal.get("nextStep") or "No next step")
+        link = str(deal.get("url") or "")
+        title = html.escape(str(deal.get("name", "Unnamed deal")))
+        title_markup = f"<a href=\"{html.escape(link, quote=True)}\">{title}</a>" if link else title
+        cards.append(
+            f"""
+              <article class="feedback-item">
+                <p class="eyebrow">{html.escape(str(deal.get('primaryOffer', 'Unclassified')))}</p>
+                <h3>{title_markup}</h3>
+                <p class="muted">{html.escape(str(deal.get('company', 'No company')))} · {html.escape(str(deal.get('contact', 'No contact')))}</p>
+                <p>{_sales_badge(str(deal.get('stageStatus', 'open')).title())} {_format_sales_money(deal.get('amount'))} · {html.escape(str(deal.get('stage', 'Unknown stage')))}</p>
+                <p><strong>Owner:</strong> {html.escape(str(deal.get('owner', 'Unassigned')))}</p>
+                <p><strong>Next step:</strong> {html.escape(next_step)}</p>
+                <p><strong>Missing:</strong> {html.escape(missing_text)}</p>
+                <p class="hint">Updated {_format_sales_relative_timestamp(str(deal.get('updatedAt', '') or ''))}</p>
+              </article>
+            """
+        )
+    return "".join(cards)
+
+
+def _sales_writeback_markup(writeback: Optional[Dict[str, Any]]) -> str:
+    if not writeback:
+        return "<p class='hint'>Run a preview to see the first autonomous action layer against live HubSpot deals.</p>"
+    summary = writeback.get("summary", {})
+    deals = writeback.get("deals", [])
+    cards = [
+        render_stat_card("Mode", str(writeback.get("mode", "preview")).title(), "Preview shows candidate changes. Apply writes only high-confidence actions."),
+        render_stat_card("Candidates", str(int(summary.get("candidateDeals", 0) or 0)), "Deals with action candidates in this run."),
+        render_stat_card("Applied", str(int(summary.get("appliedActions", 0) or 0)), "Direct updates, notes, and tasks written this run."),
+        render_stat_card("Deferred", str(int(summary.get("deferredActions", 0) or 0)), "Candidate changes that stayed below the apply threshold."),
+    ]
+    deal_cards = []
+    for deal in deals:
+        if not isinstance(deal, dict):
+            continue
+        action_items = []
+        for action in deal.get("actions", []):
+            if not isinstance(action, dict):
+                continue
+            action_items.append(
+                f"<li class='detail-item'>{html.escape(str(action.get('type', 'action')))} · {html.escape(str(action.get('status', 'preview')))} · {html.escape(str(action.get('reason', '')))}</li>"
+            )
+        reason_items = []
+        for reason in deal.get("inference", {}).get("reasons", []):
+            reason_items.append(f"<li class='detail-item'>{html.escape(str(reason))}</li>")
+        deal_cards.append(
+            f"""
+              <article class="report-card">
+                <p class="eyebrow">{html.escape(str(deal.get('stageStatus', 'open')).title())}</p>
+                <h3>{html.escape(str(deal.get('dealName', 'Unnamed deal')))}</h3>
+                <p class="muted">{html.escape(str(deal.get('companyName', 'No company')))} · {html.escape(str(deal.get('stage', 'Unknown stage')))}</p>
+                <p><strong>Current service type:</strong> {html.escape(str(deal.get('current', {}).get('serviceType') or 'Blank'))}</p>
+                <p><strong>Current next step:</strong> {html.escape(str(deal.get('current', {}).get('nextStep') or 'Blank'))}</p>
+                <p><strong>Inference:</strong> {html.escape(str(deal.get('inference', {}).get('primaryOffer') or 'Unclassified'))} ({round(float(deal.get('inference', {}).get('confidence', 0.0) or 0.0) * 100)}%)</p>
+                <ul class="detail-list">{''.join(action_items) or "<li class='detail-item'>No actions were recorded.</li>"}</ul>
+                <p class="hint">Signals:</p>
+                <ul class="detail-list">{''.join(reason_items) or "<li class='detail-item'>No signals were recorded.</li>"}</ul>
+              </article>
+            """
+        )
+    return f"""
+      <div class="grid section-gap">{''.join(cards)}</div>
+      <div class="report-list section-gap">{''.join(deal_cards) if deal_cards else "<p class='hint'>No candidate deals were returned from this write-back run.</p>"}</div>
+    """
+
+
+def sales_dashboard_page(status_message: str, snapshot: Optional[Dict[str, Any]] = None, writeback: Optional[Dict[str, Any]] = None) -> str:
     status_block = f"<p class='status-banner'>{html.escape(status_message)}</p>" if status_message else ""
+    snapshot = snapshot or {}
+    summary = snapshot.get("summary", {})
+    schema = snapshot.get("schema", {})
+    pipeline = snapshot.get("pipeline", {})
+    stage_drift = snapshot.get("stageDrift", {})
+    autonomy = snapshot.get("autonomy", {})
     body = f"""
       {sales_nav()}
       <div class="grid section-gap">
-        {render_stat_card("Deal creation", "Live", "Creates HubSpot deals after required rule validation.")}
-        {render_stat_card("Quote creation", "Guarded", "Quotes are still blocked until deal, deck, and readiness flows are wired.")}
-        {render_stat_card("Deck creation", "Guarded", "Deck artifact generation and deal sync are not implemented yet.")}
+        {render_stat_card("Open pipeline", str(int(summary.get("openDeals", 0) or 0)), f"{_format_sales_money(summary.get('openAmount'))} in current open value")}
+        {render_stat_card("Unclassified deals", str(int(summary.get("unclassifiedDeals", 0) or 0)), "Need confident service or software mapping.")}
+        {render_stat_card("Missing next step", str(int(summary.get("openDealsMissingNextStep", 0) or 0)), "Open or nurture deals that still need follow-up guidance.")}
+        {render_stat_card("Multi-offer signals", str(int(summary.get("multiOfferCandidates", 0) or 0)), "Candidates for second linked deals.")}
+        {render_stat_card("Schema model", str(int(schema.get("properties", {}).get("deals", {}).get("customCount", 0) or 0) + int(schema.get("properties", {}).get("companies", {}).get("customCount", 0) or 0) + int(schema.get("properties", {}).get("contacts", {}).get("customCount", 0) or 0)), "Custom properties across commercial objects.")}
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">What Is Happening</h2>
+          <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("happening", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
+        </section>
+        <section class="card">
+          <h2 class="section-title">What Is Broken</h2>
+          <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("broken", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
+        </section>
+        <section class="card">
+          <h2 class="section-title">What Should Happen Next</h2>
+          <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("next", [])) or "<p class='hint'>No next directives yet.</p>"}</div>
+        </section>
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Live Pipeline</h2>
+          <p class="muted">Portal {html.escape(str(snapshot.get('portalId', '') or 'Unknown'))} · {html.escape(str(pipeline.get('label', 'HubSpot pipeline')))} / {html.escape(str(pipeline.get('id', '')))}</p>
+          <p class="hint">{int(pipeline.get('liveStageCount', 0) or 0)} live stages · {int(pipeline.get('targetStageCount', 0) or 0)} target stages</p>
+          <div class="report-list section-gap">{_sales_stage_markup(snapshot)}</div>
+        </section>
+        <section class="card">
+          <h2 class="section-title">Object Definitions</h2>
+          <p class="muted">Current commercial truth across HubSpot, decks, audits, and communications.</p>
+          <div class="report-list section-gap">{_sales_object_definition_markup(snapshot)}</div>
+        </section>
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Autonomy Policy</h2>
+          <p class="muted">{html.escape(str(autonomy.get('autonomy_mode', 'high_confidence_only')).replace('_', ' '))}</p>
+          <p><strong>Agent can:</strong> {html.escape(', '.join(str(item).replace('_', ' ') for item in autonomy.get('agent_can', [])))}</p>
+          <p><strong>When not confident:</strong> {html.escape(', '.join(str(item).replace('_', ' ') for item in autonomy.get('when_not_confident', [])))}</p>
+          <p class="hint">High-confidence threshold: {round(float(schema.get('confidencePolicy', {}).get('highThreshold', 0.0) or 0.0) * 100)}% · Medium threshold: {round(float(schema.get('confidencePolicy', {}).get('mediumThreshold', 0.0) or 0.0) * 100)}%</p>
+        </section>
+        <section class="card">
+          <h2 class="section-title">Stage Drift</h2>
+          <p><strong>Target only:</strong> {html.escape(', '.join(str(item) for item in stage_drift.get('targetOnly', [])) or 'None')}</p>
+          <p><strong>Live only:</strong> {html.escape(', '.join(str(item) for item in stage_drift.get('liveOnly', [])) or 'None')}</p>
+          <p class="hint">This is where the shared operating model still differs from the current live HubSpot pipeline labels.</p>
+        </section>
+      </div>
+      <div class="card section-gap">
+        <h2 class="section-title">First Write-Back Action Layer</h2>
+        <p class="muted">Preview candidate actions first. Apply writes only high-confidence deal updates plus the supporting notes and review tasks.</p>
+        <form action="/admin/sales/actions/writeback" method="post" class="sales-inline-form">
+          <label for="sales-writeback-limit">Candidate limit</label>
+          <input id="sales-writeback-limit" name="limit" type="text" value="10">
+          <div class="sales-button-row">
+            <button type="submit" name="mode" value="preview">Preview write-back</button>
+            <button type="submit" name="mode" value="apply" class="ghost">Apply high-confidence actions</button>
+          </div>
+        </form>
+        {_sales_writeback_markup(writeback)}
+      </div>
+      <div class="card section-gap">
+        <h2 class="section-title">Recent Deals</h2>
+        <p class="muted">Latest commercial records from the live pipeline with the current missing-field audit.</p>
+        <div class="report-list section-gap">{_sales_recent_deals_markup(snapshot)}</div>
       </div>
       <div class="card section-gap">
         <h2 class="section-title">Next Operator Action</h2>
         <p><a href="/admin/sales/deals/create">Create a HubSpot deal</a></p>
-        <p class="hint">The route validates `config/hubspot_sales_rules.json` before calling HubSpot.</p>
+        <p><a href="/admin/api/sales/dashboard">Open the dashboard JSON contract</a></p>
+        <p class="hint">Deal creation is live today. Deck, audit, and quote creation remain downstream layers after this dashboard and write-back surface.</p>
       </div>
     """
     return page_shell(
         title="Anata Sales OS",
         eyebrow="Sales OS",
         heading="Sales OS",
-        intro="Commercial operator surface for HubSpot-backed deal creation and guarded downstream actions.",
+        intro="Commercial operator surface for the live HubSpot pipeline, object definitions, and the first autonomous write-back layer.",
         status_block=status_block,
         body=body,
     )
@@ -2403,6 +2642,11 @@ def sales_os_guard_page(requested_path: str) -> str:
     )
 
 
+def parse_sales_deal_ids(value: Any) -> List[str]:
+    raw = str(value or "").replace("\n", ",")
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def latest_download_url(environ: Dict[str, Any], token: str) -> str:
     host = environ.get("HTTP_HOST") or "localhost"
     scheme = environ.get("HTTP_X_FORWARDED_PROTO") or environ.get("wsgi.url_scheme") or "http"
@@ -2511,7 +2755,62 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
         return redirect_response(start_response, f"{fulfillment_cs_base_path()}/")
 
     if method == "GET" and path == "/admin/sales/":
-        body = sales_dashboard_page(sales_status_message(query))
+        try:
+            snapshot = hubspot_sales_os.get_sales_dashboard_snapshot()
+            body = sales_dashboard_page(sales_status_message(query), snapshot=snapshot)
+            return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
+        except hubspot_sales.HubSpotSalesError as exc:
+            body = sales_dashboard_page(str(exc))
+            return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
+        except Exception as exc:
+            body = sales_dashboard_page(f"Sales dashboard failed to load: {exc}")
+            return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
+
+    if method == "GET" and path == "/admin/api/sales/dashboard":
+        try:
+            snapshot = hubspot_sales_os.get_sales_dashboard_snapshot(force_refresh=True)
+        except hubspot_sales.HubSpotSalesError as exc:
+            return json_response(start_response, "503 Service Unavailable", {"ok": False, "error": str(exc), "hubspot": exc.payload})
+        except Exception as exc:
+            return json_response(start_response, "500 Internal Server Error", {"ok": False, "error": str(exc)})
+        return json_response(start_response, "200 OK", {"ok": True, "snapshot": snapshot})
+
+    if method == "POST" and path in {"/admin/sales/actions/writeback", "/admin/api/sales/writeback"}:
+        try:
+            payload = parse_feedback_request(environ)
+        except (json.JSONDecodeError, ValueError):
+            if wants_json_response(environ) or path.startswith("/admin/api/"):
+                return json_response(start_response, "400 Bad Request", {"ok": False, "error": "bad-request"})
+            body = sales_dashboard_page("Sales write-back request was incomplete.")
+            return text_response(start_response, "400 Bad Request", body, "text/html; charset=utf-8")
+        mode = str(payload.get("mode", "preview") or "preview").strip().lower()
+        if mode not in {"preview", "apply"}:
+            mode = "preview"
+        try:
+            limit = int(str(payload.get("limit", "10") or "10"))
+        except ValueError:
+            limit = 10
+        try:
+            result = hubspot_sales_os.run_writeback(
+                mode=mode,
+                deal_ids=parse_sales_deal_ids(payload.get("deal_ids")),
+                limit=limit,
+            )
+            snapshot = hubspot_sales_os.get_sales_dashboard_snapshot(force_refresh=(mode == "apply"))
+        except hubspot_sales.HubSpotSalesError as exc:
+            if wants_json_response(environ) or path.startswith("/admin/api/"):
+                return json_response(start_response, "503 Service Unavailable", {"ok": False, "error": str(exc), "hubspot": exc.payload})
+            body = sales_dashboard_page(str(exc))
+            return text_response(start_response, "503 Service Unavailable", body, "text/html; charset=utf-8")
+        except Exception as exc:
+            if wants_json_response(environ) or path.startswith("/admin/api/"):
+                return json_response(start_response, "500 Internal Server Error", {"ok": False, "error": str(exc)})
+            body = sales_dashboard_page(f"Sales write-back failed: {exc}")
+            return text_response(start_response, "500 Internal Server Error", body, "text/html; charset=utf-8")
+        if wants_json_response(environ) or path.startswith("/admin/api/"):
+            return json_response(start_response, "200 OK", {"ok": True, "result": result, "snapshot": snapshot})
+        status_message = "High-confidence sales write-back actions were applied." if mode == "apply" else "Sales write-back preview generated."
+        body = sales_dashboard_page(status_message, snapshot=snapshot, writeback=result)
         return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
 
     if method == "GET" and path == "/admin/sales/deals/create":
