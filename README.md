@@ -74,6 +74,8 @@ export AP_TRANSACTIONS_URL='http://localhost:10000/latest.csv'
 export AP_TRANSACTIONS_AUTH_TOKEN='machine-download-token'
 ```
 
+Authentication is fail-closed by default. Browser access to the AP inbox, `/latest.csv`, `/upload`, `/admin/*`, and `/website-ops/*` requires `AP_ADMIN_USERNAME` and `AP_ADMIN_PASSWORD`; machine downloads of `/latest.csv` require a configured matching `AP_UPLOAD_TOKEN`. For temporary local-only development, set `ANATA_ALLOW_UNAUTHENTICATED_LOCAL=true`.
+
 The service stores:
 
 - the current file as `latest.csv`
@@ -158,6 +160,139 @@ Configure on the inbox service:
 - `QBO_TOKEN_STORE_PATH=/var/data/ap_upload_inbox/qbo_tokens.json`
 
 The service refreshes access tokens as needed and persists the latest rotated refresh token to `QBO_TOKEN_STORE_PATH`, which is important because Intuit rotates refresh tokens over time. This currently powers the inbox analysis and vendor matching.
+
+## Website Ops
+
+The repo now also includes an internal website-ops surface for production SEO review and feedback intake:
+
+- report library at `/website-ops/reports/`
+- latest report shortcut at `/website-ops/reports/latest`
+- structured feedback intake at `/website-ops/feedback`
+- open work queue at `/website-ops/queue`
+- backup browser at `/website-ops/backups/`
+
+The read-only collection and report pipeline lives in [website_ops/core.py](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/website_ops/core.py). The scheduled runner lives in [scripts/run_website_ops.py](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/scripts/run_website_ops.py) and reads [config/website_ops.json](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/config/website_ops.json).
+
+Run a daily sweep locally:
+
+```bash
+python3 scripts/run_website_ops.py --mode daily
+```
+
+Override monitored URLs without editing config:
+
+```bash
+WEBSITE_OPS_URLS='https://anatainc.com/,https://anatainc.com/services/' \
+python3 scripts/run_website_ops.py --mode daily
+```
+
+The runner writes JSON, Markdown, and HTML artifacts under `website-ops/reports/<mode>/` and folds in feedback records stored under `website-ops/feedback/`.
+
+Approved dashboard items can now carry an explicit safe action payload. The first supported action is:
+
+- `replace_primary_heading`
+
+When an item is approved with:
+
+- `action_type=replace_primary_heading`
+- `action_value=<new H1 text>`
+- optional `target_post_id=<WordPress page ID>`
+
+the runner can execute it against WordPress on the next scheduled pass, back up the original page payload, verify the live H1, and mark the feedback record `done` or `error`.
+
+Enable live execution with environment variables:
+
+```bash
+export WEBSITE_OPS_EXECUTE_APPROVED=true
+export WP_SITE_URL='https://anatainc.com'
+export WP_USERNAME='...'
+export WP_APPLICATION_PASSWORD='...'
+```
+
+Leave `WEBSITE_OPS_EXECUTE_APPROVED` unset to keep the system in report-and-approval mode only.
+
+## Fulfillment Support Environment
+
+The repo now also includes a dedicated environment scaffold for a fulfillment customer service agent that is intended to run in Codex cloud against this workspace rather than on a local machine.
+
+The environment runner lives in [scripts/run_fulfillment_support.py](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/scripts/run_fulfillment_support.py) and reads [config/fulfillment_support.json](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/config/fulfillment_support.json).
+
+Prepare directories and validate enabled integrations:
+
+```bash
+python3 scripts/run_fulfillment_support.py
+```
+
+Validate without creating directories:
+
+```bash
+python3 scripts/run_fulfillment_support.py --validate-only
+```
+
+The environment currently models:
+
+- Slack-first intake with optional Gmail/Shopify extensions
+- Labelogics-first shipment lookup with Shopify as backup when credentials exist
+- escalation-owner routing plus Slack operator tagging
+- a scheduled agent window of every 2 hours on weekdays from 8:00 AM through 6:00 PM America/Denver
+
+The default config is currently set for a Slack plus Labelogics first pass:
+
+- Slack enabled
+- Labelogics enabled
+- Gmail disabled
+- Shopify disabled
+
+The Slack side now assumes live Slack Web API access rather than a file export.
+
+The Labelogics side now assumes a production app URL, sandbox URL, and API key/password, with token generation performed through the documented auth endpoint. Account selection is handled through a matching layer instead of one hard-coded global account ID.
+
+The matching layer now persists reviewable connection data in a local SQLite catalog under `support-agent/knowledge/connections.sqlite3`.
+
+The same SQLite catalog now also stores support cases, case events, and case assignments so the agent can:
+
+- group work by Slack thread
+- post customer-facing replies in-thread
+- escalate unresolved issues into `#fulfillment-ops`
+- keep cases open until a human marks them resolved
+
+There is now also a read-only review pipeline for the future `agent.anatainc.com` page. It collects live candidate support threads and outputs stable JSON/Markdown/HTML artifacts for UI consumption.
+
+The internal app now exposes that review surface inside the admin site at:
+
+- `/admin/fulfillment-cs/`
+- `/admin/fulfillment-cs/reports/`
+- `/admin/fulfillment-cs/reports/latest`
+
+Run the review pipeline:
+
+```bash
+python3 scripts/run_support_agent_review.py
+```
+
+Dry-run it without writing artifacts:
+
+```bash
+python3 scripts/run_support_agent_review.py --dry-run
+```
+
+If the hosted app should read support-review artifacts from persistent storage, set `SUPPORT_AGENT_REPORTS_DIR` to that live reports directory.
+
+The Shopify side is scaffolded as an optional backup order-lookup path using an admin-created custom app, but it remains disabled until real store credentials are provided.
+
+Run the scheduled agent logic manually:
+
+```bash
+python3 scripts/run_fulfillment_support.py --run-agent
+```
+
+Force a manual run outside the scheduled work window:
+
+```bash
+python3 scripts/run_fulfillment_support.py --run-agent --force-run
+```
+
+Setup notes live in [docs/fulfillment-support-production-setup.md](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/docs/fulfillment-support-production-setup.md).
 
 ## Usage
 

@@ -1,0 +1,128 @@
+{
+  "action_counts": {
+    "clarifying": 2,
+    "investigating": 1
+  },
+  "candidate_count": 3,
+  "candidates": [
+    {
+      "brand_name": "Mule Deer Foundation",
+      "channel": "mule-deer-anatafulfillment",
+      "channel_id": "C099KMCAQ6A",
+      "connection_status": "partial",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "placeholder_account_id",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "external": true,
+      "identifiers": {
+        "order_numbers": [],
+        "tracking_numbers": []
+      },
+      "permalink": "https://anatainc.slack.com/archives/C099KMCAQ6A/p1774656761822649",
+      "question_summary": "I entered the purchase order for the Crispi Boots as 8 individual boots.  Did you receive 4 pairs of boots, therefore all 8? | Or did only 4 individual (2 Pairs) arrive?",
+      "recommended_action": {
+        "customer_reply": "Can you send the PO number or shipment reference so I can pull this up?",
+        "escalation_reason": "",
+        "reply_type": "clarifying",
+        "should_escalate": false,
+        "status": "investigating"
+      },
+      "source_team": "T09R99J118S",
+      "text": "I entered the purchase order for the Crispi Boots as 8 individual boots.  Did you receive 4 pairs of boots, therefore all 8?  Or did only 4 individual (2 Pairs) arrive?  Thanks.",
+      "thread_ts": "1774656761.822649",
+      "ts": "1774656761.822649",
+      "user": "U0A1TNPUYEB",
+      "user_team": "T09R99J118S"
+    },
+    {
+      "brand_name": "Mule Deer Foundation",
+      "channel": "mule-deer-anatafulfillment",
+      "channel_id": "C099KMCAQ6A",
+      "connection_status": "partial",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "placeholder_account_id",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "external": true,
+      "identifiers": {
+        "order_numbers": [],
+        "tracking_numbers": []
+      },
+      "permalink": "https://anatainc.slack.com/archives/C099KMCAQ6A/p1774649075412249",
+      "question_summary": "Thank you!",
+      "recommended_action": {
+        "customer_reply": "Can you send the order number so I can pull this up?",
+        "escalation_reason": "",
+        "reply_type": "clarifying",
+        "should_escalate": false,
+        "status": "investigating"
+      },
+      "source_team": "T09R99J118S",
+      "text": "Thank you!",
+      "thread_ts": "1774649075.412249",
+      "ts": "1774649075.412249",
+      "user": "U0A1TNPUYEB",
+      "user_team": "T09R99J118S"
+    },
+    {
+      "brand_name": "Mule Deer Foundation",
+      "channel": "mule-deer-anatafulfillment",
+      "channel_id": "C099KMCAQ6A",
+      "connection_status": "partial",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "placeholder_account_id",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "external": false,
+      "identifiers": {
+        "order_numbers": [],
+        "tracking_numbers": [
+          "1Z17D9450320010017"
+        ]
+      },
+      "permalink": "https://anatainc.slack.com/archives/C099KMCAQ6A/p1774648273861389",
+      "question_summary": "tracking for Don Newman: 1Z17D9450320010017",
+      "recommended_action": {
+        "customer_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+        "escalation_reason": "placeholder_account_id",
+        "reply_type": "investigating",
+        "should_escalate": true,
+        "status": "waiting_human"
+      },
+      "source_team": "",
+      "text": "tracking for Don Newman: 1Z17D9450320010017",
+      "thread_ts": "1774648273.861389",
+      "ts": "1774648273.861389",
+      "user": "U0A9KHT9NBS",
+      "user_team": ""
+    }
+  ],
+  "generated_at": "2026-03-27T21:41:39.961946-06:00",
+  "status": "ready",
+  "title": "Fulfillment Support Review"
+}

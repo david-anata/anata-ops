@@ -1,0 +1,19 @@
+{
+  "website_ops_root": "website-ops",
+  "daily_reports_dir": "website-ops/reports/daily",
+  "feedback_dir": "website-ops/feedback",
+  "user_agent": "anata-website-ops/1.0",
+  "timeout_seconds": 20,
+  "report_title": "Anata Website Ops Daily Report",
+  "site_name": "Anata",
+  "base_url": "https://anatainc.com",
+  "urls": [
+    "https://anatainc.com/",
+    "https://anatainc.com/services/",
+    "https://anatainc.com/services/fulfillment/",
+    "https://anatainc.com/services/shipping/",
+    "https://anatainc.com/services/ai/",
+    "https://anatainc.com/services/advertising/",
+    "https://anatainc.com/contact/"
+  ]
+}

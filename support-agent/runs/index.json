@@ -1,0 +1,247 @@
+{
+  "generated_at": "2026-04-13T20:13:33.606699+00:00",
+  "latest": {
+    "detail": "/admin/fulfillment-cs/reports/support-review-2026-04-13T14-13-32.891185-06-00",
+    "html": "/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/support-agent/runs/latest.html",
+    "json": "/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/support-agent/runs/latest.json",
+    "markdown": "/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/support-agent/runs/latest.md"
+  },
+  "latest_report_id": "2026-04-13T14-13-32.891185-06-00",
+  "reports": [
+    {
+      "action_counts": {
+        "clarifying": 0,
+        "escalated": 2,
+        "investigating": 0,
+        "ready_to_answer": 0,
+        "resolved": 0
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 2,
+      "generated_at": "2026-04-13T14:13:32.891185-06:00",
+      "lifecycle_counts": {
+        "escalated": 0,
+        "investigating": 0,
+        "new": 0,
+        "resolved": 0,
+        "responded": 0,
+        "waiting_human": 2
+      },
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-04-13T14-13-32.891185-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-04-13T14-13-32.891185-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-04-13T14-13-32.891185-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-04-13T14-13-32.891185-06-00.md"
+      },
+      "report_id": "2026-04-13T14-13-32.891185-06-00",
+      "report_slug": "support-review-2026-04-13T14-13-32.891185-06-00",
+      "title": "Fulfillment CS Review"
+    },
+    {
+      "action_counts": {
+        "clarifying": 0,
+        "escalated": 2,
+        "investigating": 0,
+        "ready_to_answer": 0,
+        "resolved": 0
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 2,
+      "generated_at": "2026-03-31T17:13:46.596001-06:00",
+      "lifecycle_counts": {
+        "escalated": 0,
+        "investigating": 0,
+        "new": 0,
+        "resolved": 0,
+        "responded": 0,
+        "waiting_human": 2
+      },
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-46.596001-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-46.596001-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-46.596001-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-46.596001-06-00.md"
+      },
+      "report_id": "2026-03-31T17-13-46.596001-06-00",
+      "report_slug": "support-review-2026-03-31T17-13-46.596001-06-00",
+      "title": "Fulfillment CS Review"
+    },
+    {
+      "action_counts": {
+        "clarifying": 1,
+        "escalated": 2,
+        "investigating": 0,
+        "ready_to_answer": 0,
+        "resolved": 0
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 3,
+      "generated_at": "2026-03-31T17:13:05.854700-06:00",
+      "lifecycle_counts": {
+        "escalated": 0,
+        "investigating": 1,
+        "new": 0,
+        "resolved": 0,
+        "responded": 0,
+        "waiting_human": 2
+      },
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-05.854700-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-05.854700-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-05.854700-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-05.854700-06-00.md"
+      },
+      "report_id": "2026-03-31T17-13-05.854700-06-00",
+      "report_slug": "support-review-2026-03-31T17-13-05.854700-06-00",
+      "title": "Fulfillment CS Review"
+    },
+    {
+      "action_counts": {
+        "clarifying": 1,
+        "escalated": 2,
+        "investigating": 0,
+        "ready_to_answer": 0,
+        "resolved": 0
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 3,
+      "generated_at": "2026-03-31T17:12:11.678455-06:00",
+      "lifecycle_counts": {
+        "escalated": 0,
+        "investigating": 1,
+        "new": 0,
+        "resolved": 0,
+        "responded": 0,
+        "waiting_human": 2
+      },
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-12-11.678455-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-12-11.678455-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-12-11.678455-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-12-11.678455-06-00.md"
+      },
+      "report_id": "2026-03-31T17-12-11.678455-06-00",
+      "report_slug": "support-review-2026-03-31T17-12-11.678455-06-00",
+      "title": "Fulfillment CS Review"
+    },
+    {
+      "action_counts": {
+        "clarifying": 0,
+        "escalated": 1,
+        "investigating": 0,
+        "ready_to_answer": 0,
+        "resolved": 0
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 1,
+      "generated_at": "2026-03-28T19:02:10.317585-06:00",
+      "lifecycle_counts": {
+        "escalated": 0,
+        "investigating": 0,
+        "new": 0,
+        "resolved": 0,
+        "responded": 0,
+        "waiting_human": 1
+      },
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-03-28T19-02-10.317585-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-03-28T19-02-10.317585-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-03-28T19-02-10.317585-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-03-28T19-02-10.317585-06-00.md"
+      },
+      "report_id": "2026-03-28T19-02-10.317585-06-00",
+      "report_slug": "support-review-2026-03-28T19-02-10.317585-06-00",
+      "title": "Fulfillment CS Review"
+    },
+    {
+      "action_counts": {
+        "clarifying": 1,
+        "investigating": 1
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 2,
+      "generated_at": "2026-03-27T21:50:11.634208-06:00",
+      "lifecycle_counts": {},
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-50-11.634208-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-50-11.634208-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-50-11.634208-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-50-11.634208-06-00.md"
+      },
+      "report_id": "2026-03-27T21-50-11.634208-06-00",
+      "report_slug": "support-review-2026-03-27T21-50-11.634208-06-00",
+      "title": "Fulfillment Support Review"
+    },
+    {
+      "action_counts": {
+        "clarifying": 1,
+        "investigating": 1
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 2,
+      "generated_at": "2026-03-27T21:42:10.423244-06:00",
+      "lifecycle_counts": {},
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-42-10.423244-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-42-10.423244-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-42-10.423244-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-42-10.423244-06-00.md"
+      },
+      "report_id": "2026-03-27T21-42-10.423244-06-00",
+      "report_slug": "support-review-2026-03-27T21-42-10.423244-06-00",
+      "title": "Fulfillment Support Review"
+    },
+    {
+      "action_counts": {
+        "clarifying": 2,
+        "investigating": 1
+      },
+      "artifact_formats": [
+        "json",
+        "html",
+        "md"
+      ],
+      "candidate_count": 3,
+      "generated_at": "2026-03-27T21:41:39.961946-06:00",
+      "lifecycle_counts": {},
+      "links": {
+        "detail": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-41-39.961946-06-00",
+        "html": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-41-39.961946-06-00.html",
+        "json": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-41-39.961946-06-00.json",
+        "md": "/admin/fulfillment-cs/reports/support-review-2026-03-27T21-41-39.961946-06-00.md"
+      },
+      "report_id": "2026-03-27T21-41-39.961946-06-00",
+      "report_slug": "support-review-2026-03-27T21-41-39.961946-06-00",
+      "title": "Fulfillment Support Review"
+    }
+  ],
+  "schema_version": "1.0"
+}

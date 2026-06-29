@@ -1,0 +1,92 @@
+{
+  "agent_name": "Fulfillment Customer Service Agent",
+  "timezone": "America/Denver",
+  "workspace_root": ".",
+  "agent_root": "support-agent",
+  "paths": {
+    "intake": "support-agent/intake",
+    "runs": "support-agent/runs",
+    "knowledge": "support-agent/knowledge",
+    "escalations": "support-agent/escalations",
+    "connections_db": "support-agent/knowledge/connections.sqlite3",
+    "shopify_accounts": "support-agent/knowledge/shopify_accounts.json",
+    "labelogics_accounts": "support-agent/knowledge/labelogics_accounts.json"
+  },
+  "schedule": {
+    "weekday_interval_hours": 2,
+    "weekday_days": ["MO", "TU", "WE", "TH", "FR"],
+    "weekday_hours": [8, 10, 12, 14, 16, 18]
+  },
+  "agent_runtime": {
+    "enabled": true,
+    "mode": "scheduled",
+    "queue_channel": "fulfillment-ops",
+    "lookback_hours": 6,
+    "escalation_slack_user_ids_env": "SUPPORT_ESCALATION_SLACK_USER_IDS",
+    "resolution_markers": ["resolved", "mark resolved", "closed", "complete", "done"]
+  },
+  "channels": {
+    "slack": {
+      "enabled": true,
+      "description": "Primary intake for customer service requests through the live Slack Web API.",
+      "required_env": ["SLACK_API_BASE_URL", "SLACK_BOT_TOKEN", "SUPPORT_SLACK_CHANNELS"]
+    },
+    "gmail": {
+      "enabled": false,
+      "description": "Shared inbox intake delivered through a Gmail export or connector path.",
+      "required_env": ["SUPPORT_GMAIL_EXPORT_PATH"]
+    }
+  },
+  "systems": {
+    "shopify": {
+      "enabled": false,
+      "description": "Backup Shopify order verification through an admin-created custom app.",
+      "required_env": ["SHOPIFY_STORE_DOMAIN", "SHOPIFY_ADMIN_API_ACCESS_TOKEN", "SHOPIFY_API_VERSION"]
+    },
+    "labelogics": {
+      "enabled": true,
+      "description": "Labelogics shipping and label workflow access for shipment, label, and order operations.",
+      "required_env": [
+        "LABELOGICS_APP_URL",
+        "LABELOGICS_SANDBOX_URL",
+        "LABELOGICS_KEY",
+        "LABELOGICS_PASSWORD"
+      ]
+    }
+  },
+  "account_matching": {
+    "enabled": true,
+    "ignored_tokens": [
+      "anata",
+      "fulfillment",
+      "fulfill",
+      "shipping",
+      "warehouse",
+      "logistics",
+      "ops",
+      "operation",
+      "operations",
+      "support",
+      "portal",
+      "store",
+      "shop",
+      "shopify",
+      "cs",
+      "3pl",
+      "and",
+      "the"
+    ],
+    "alias_overrides": {
+      "cloud9_anatafulfıllment": "cloud9-anatafulfillment"
+    }
+  },
+  "response_policy": {
+    "default_escalation_owner_env": "SUPPORT_ESCALATION_DEFAULT_OWNER",
+    "escalate_when": [
+      "tracking status conflicts across systems",
+      "refund or replacement needs approval",
+      "customer identity or order number is missing",
+      "shipment is marked delivered but customer reports non-receipt"
+    ]
+  }
+}

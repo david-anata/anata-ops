@@ -1,0 +1,396 @@
+{
+  "changes_applied": 0,
+  "date": "2026-04-27",
+  "executed_actions": [],
+  "feedback_open": 0,
+  "feedback_received": 0,
+  "generated_at": "2026-04-27T14:32:04.297245+00:00",
+  "issue_counts_by_code": {
+    "UNREACHABLE": 7
+  },
+  "issue_counts_by_priority": {
+    "P0": 7,
+    "P1": 0,
+    "P2": 0,
+    "P3": 0
+  },
+  "issues": [
+    {
+      "code": "UNREACHABLE",
+      "details": {
+        "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+        "status_code": null
+      },
+      "page_url": "https://anatainc.com/",
+      "priority": "P0",
+      "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+      "status": "open",
+      "summary": "The page could not be fetched."
+    },
+    {
+      "code": "UNREACHABLE",
+      "details": {
+        "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+        "status_code": null
+      },
+      "page_url": "https://anatainc.com/contact/",
+      "priority": "P0",
+      "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+      "status": "open",
+      "summary": "The page could not be fetched."
+    },
+    {
+      "code": "UNREACHABLE",
+      "details": {
+        "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+        "status_code": null
+      },
+      "page_url": "https://anatainc.com/services/",
+      "priority": "P0",
+      "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+      "status": "open",
+      "summary": "The page could not be fetched."
+    },
+    {
+      "code": "UNREACHABLE",
+      "details": {
+        "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+        "status_code": null
+      },
+      "page_url": "https://anatainc.com/services/advertising/",
+      "priority": "P0",
+      "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+      "status": "open",
+      "summary": "The page could not be fetched."
+    },
+    {
+      "code": "UNREACHABLE",
+      "details": {
+        "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+        "status_code": null
+      },
+      "page_url": "https://anatainc.com/services/ai/",
+      "priority": "P0",
+      "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+      "status": "open",
+      "summary": "The page could not be fetched."
+    },
+    {
+      "code": "UNREACHABLE",
+      "details": {
+        "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+        "status_code": null
+      },
+      "page_url": "https://anatainc.com/services/fulfillment/",
+      "priority": "P0",
+      "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+      "status": "open",
+      "summary": "The page could not be fetched."
+    },
+    {
+      "code": "UNREACHABLE",
+      "details": {
+        "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+        "status_code": null
+      },
+      "page_url": "https://anatainc.com/services/shipping/",
+      "priority": "P0",
+      "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+      "status": "open",
+      "summary": "The page could not be fetched."
+    }
+  ],
+  "issues_found": 7,
+  "notes": [
+    "Run mode: weekly.",
+    "Monitored URLs: 7.",
+    "Feedback records loaded: 0."
+  ],
+  "pages": [
+    {
+      "canonical_url": "",
+      "fetched_at": "2026-04-27T14:32:04.239270+00:00",
+      "final_url": "https://anatainc.com/",
+      "h1": [],
+      "h2": [],
+      "h3": [],
+      "heading_counts": {
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "issue_count": 1,
+      "issues": [
+        {
+          "code": "UNREACHABLE",
+          "details": {
+            "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+            "status_code": null
+          },
+          "page_url": "https://anatainc.com/",
+          "priority": "P0",
+          "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+          "status": "open",
+          "summary": "The page could not be fetched."
+        }
+      ],
+      "meta_description": "",
+      "noindex": false,
+      "priority": "P0",
+      "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+      "robots": "",
+      "status": "unreachable",
+      "status_code": null,
+      "text_excerpt": "",
+      "text_length": 0,
+      "title": "",
+      "url": "https://anatainc.com/"
+    },
+    {
+      "canonical_url": "",
+      "fetched_at": "2026-04-27T14:32:04.294752+00:00",
+      "final_url": "https://anatainc.com/services/",
+      "h1": [],
+      "h2": [],
+      "h3": [],
+      "heading_counts": {
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "issue_count": 1,
+      "issues": [
+        {
+          "code": "UNREACHABLE",
+          "details": {
+            "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+            "status_code": null
+          },
+          "page_url": "https://anatainc.com/services/",
+          "priority": "P0",
+          "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+          "status": "open",
+          "summary": "The page could not be fetched."
+        }
+      ],
+      "meta_description": "",
+      "noindex": false,
+      "priority": "P0",
+      "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+      "robots": "",
+      "status": "unreachable",
+      "status_code": null,
+      "text_excerpt": "",
+      "text_length": 0,
+      "title": "",
+      "url": "https://anatainc.com/services/"
+    },
+    {
+      "canonical_url": "",
+      "fetched_at": "2026-04-27T14:32:04.295313+00:00",
+      "final_url": "https://anatainc.com/services/fulfillment/",
+      "h1": [],
+      "h2": [],
+      "h3": [],
+      "heading_counts": {
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "issue_count": 1,
+      "issues": [
+        {
+          "code": "UNREACHABLE",
+          "details": {
+            "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+            "status_code": null
+          },
+          "page_url": "https://anatainc.com/services/fulfillment/",
+          "priority": "P0",
+          "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+          "status": "open",
+          "summary": "The page could not be fetched."
+        }
+      ],
+      "meta_description": "",
+      "noindex": false,
+      "priority": "P0",
+      "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+      "robots": "",
+      "status": "unreachable",
+      "status_code": null,
+      "text_excerpt": "",
+      "text_length": 0,
+      "title": "",
+      "url": "https://anatainc.com/services/fulfillment/"
+    },
+    {
+      "canonical_url": "",
+      "fetched_at": "2026-04-27T14:32:04.295660+00:00",
+      "final_url": "https://anatainc.com/services/shipping/",
+      "h1": [],
+      "h2": [],
+      "h3": [],
+      "heading_counts": {
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "issue_count": 1,
+      "issues": [
+        {
+          "code": "UNREACHABLE",
+          "details": {
+            "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+            "status_code": null
+          },
+          "page_url": "https://anatainc.com/services/shipping/",
+          "priority": "P0",
+          "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+          "status": "open",
+          "summary": "The page could not be fetched."
+        }
+      ],
+      "meta_description": "",
+      "noindex": false,
+      "priority": "P0",
+      "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+      "robots": "",
+      "status": "unreachable",
+      "status_code": null,
+      "text_excerpt": "",
+      "text_length": 0,
+      "title": "",
+      "url": "https://anatainc.com/services/shipping/"
+    },
+    {
+      "canonical_url": "",
+      "fetched_at": "2026-04-27T14:32:04.295997+00:00",
+      "final_url": "https://anatainc.com/services/ai/",
+      "h1": [],
+      "h2": [],
+      "h3": [],
+      "heading_counts": {
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "issue_count": 1,
+      "issues": [
+        {
+          "code": "UNREACHABLE",
+          "details": {
+            "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+            "status_code": null
+          },
+          "page_url": "https://anatainc.com/services/ai/",
+          "priority": "P0",
+          "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+          "status": "open",
+          "summary": "The page could not be fetched."
+        }
+      ],
+      "meta_description": "",
+      "noindex": false,
+      "priority": "P0",
+      "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+      "robots": "",
+      "status": "unreachable",
+      "status_code": null,
+      "text_excerpt": "",
+      "text_length": 0,
+      "title": "",
+      "url": "https://anatainc.com/services/ai/"
+    },
+    {
+      "canonical_url": "",
+      "fetched_at": "2026-04-27T14:32:04.296320+00:00",
+      "final_url": "https://anatainc.com/services/advertising/",
+      "h1": [],
+      "h2": [],
+      "h3": [],
+      "heading_counts": {
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "issue_count": 1,
+      "issues": [
+        {
+          "code": "UNREACHABLE",
+          "details": {
+            "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+            "status_code": null
+          },
+          "page_url": "https://anatainc.com/services/advertising/",
+          "priority": "P0",
+          "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+          "status": "open",
+          "summary": "The page could not be fetched."
+        }
+      ],
+      "meta_description": "",
+      "noindex": false,
+      "priority": "P0",
+      "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+      "robots": "",
+      "status": "unreachable",
+      "status_code": null,
+      "text_excerpt": "",
+      "text_length": 0,
+      "title": "",
+      "url": "https://anatainc.com/services/advertising/"
+    },
+    {
+      "canonical_url": "",
+      "fetched_at": "2026-04-27T14:32:04.296626+00:00",
+      "final_url": "https://anatainc.com/contact/",
+      "h1": [],
+      "h2": [],
+      "h3": [],
+      "heading_counts": {
+        "h1": 0,
+        "h2": 0,
+        "h3": 0
+      },
+      "issue_count": 1,
+      "issues": [
+        {
+          "code": "UNREACHABLE",
+          "details": {
+            "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+            "status_code": null
+          },
+          "page_url": "https://anatainc.com/contact/",
+          "priority": "P0",
+          "recommendation": "Verify the URL, DNS, and origin server response before making content changes.",
+          "status": "open",
+          "summary": "The page could not be fetched."
+        }
+      ],
+      "meta_description": "",
+      "noindex": false,
+      "priority": "P0",
+      "response_error": "URLError: [Errno 8] nodename nor servname provided, or not known",
+      "robots": "",
+      "status": "unreachable",
+      "status_code": null,
+      "text_excerpt": "",
+      "text_length": 0,
+      "title": "",
+      "url": "https://anatainc.com/contact/"
+    }
+  ],
+  "pages_healthy": 0,
+  "pages_reviewed": 7,
+  "pages_with_issues": 7,
+  "recent_feedback": [],
+  "recommendations": [
+    "Verify the URL, DNS, and origin server response before making content changes."
+  ],
+  "report_type": "website_ops_weekly",
+  "scope": "automated weekly trend review",
+  "slug": "anata-website-ops-weekly-report",
+  "status": "needs-attention",
+  "title": "Anata Website Ops Weekly Report"
+}

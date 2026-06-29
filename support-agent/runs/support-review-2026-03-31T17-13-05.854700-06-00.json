@@ -1,0 +1,445 @@
+{
+  "action_counts": {
+    "clarifying": 1,
+    "escalated": 2,
+    "investigating": 0,
+    "ready_to_answer": 0,
+    "resolved": 0
+  },
+  "candidate_count": 3,
+  "candidates": [
+    {
+      "account_id": "",
+      "account_name": "akimbo-anatafulfillment",
+      "brand": "akimbo-anatafulfillment",
+      "brand_name": "akimbo-anatafulfillment",
+      "case_id": "case-7d714839b61eab1f",
+      "channel": "akimbo-anatafulfillment",
+      "channel_id": "C09A97BN42D",
+      "channel_name": "akimbo-anatafulfillment",
+      "connection_status": "unmatched",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09A97BN42D/p1774987268722889",
+      "draft_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+      "escalation_reason": "match_missing",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "missing_account_match",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: missing_account_match | Shopify: missing_store_match",
+      "identifiers": {
+        "order_numbers": [
+          "109823"
+        ],
+        "po_numbers": [],
+        "reference_ids": [],
+        "shipment_ids": [],
+        "tracking_numbers": []
+      },
+      "issue_category": "match_missing",
+      "lifecycle_state": "waiting_human",
+      "permalink": "https://anatainc.slack.com/archives/C09A97BN42D/p1774987268722889",
+      "primary_owner": "U096MRDT28Y",
+      "question_summary": "*#109823\n\nCan we please make sure the black sweatpants in this order have the white tag. NOT the blue.\n\n<@U096MRDT28Y>* *<@U063WD0MSPM> \n\nThanks guys!* | Wanting to send out the new fit, not the old",
+      "recommended_action": {
+        "customer_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+        "escalation_reason": "match_missing",
+        "reply_type": "investigating",
+        "should_escalate": true,
+        "status": "waiting_human"
+      },
+      "related_case_id": "case-7d714839b61eab1f",
+      "relationship_type": "follow_up",
+      "secondary_owner": "",
+      "shopify_store_domain": "",
+      "source_message_ts": "1774987268.722889",
+      "text": "*#109823\n\nCan we please make sure the black sweatpants in this order have the white tag. NOT the blue.\n\n<@U096MRDT28Y>* *<@U063WD0MSPM> \n\nThanks guys!* | Wanting to send out the new fit, not the old",
+      "thread_ts": "1774987268.722889",
+      "ts": "1774987268.722889",
+      "ui_recommendation": "escalated",
+      "updated_at": "2026-03-31 23:13:11",
+      "waiting_on": "human"
+    },
+    {
+      "account_id": "pending:colorbyfeliks",
+      "account_name": "ColorByFeliks",
+      "brand": "ColorByFeliks",
+      "brand_name": "ColorByFeliks",
+      "case_id": "case-a1b904e3e352397d",
+      "channel": "color-by-feliks-anatafulfillment",
+      "channel_id": "C09MWJ9UA4E",
+      "channel_name": "color-by-feliks-anatafulfillment",
+      "connection_status": "partial",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09MWJ9UA4E/p1774977314985939",
+      "draft_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+      "escalation_reason": "placeholder_account_id",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "placeholder_account_id",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: placeholder_account_id | Shopify: missing_store_match",
+      "identifiers": {
+        "order_numbers": [
+          "11404"
+        ],
+        "po_numbers": [],
+        "reference_ids": [],
+        "shipment_ids": [],
+        "tracking_numbers": []
+      },
+      "issue_category": "placeholder_account_id",
+      "lifecycle_state": "waiting_human",
+      "permalink": "https://anatainc.slack.com/archives/C09MWJ9UA4E/p1774977314985939",
+      "primary_owner": "U096MRDT28Y",
+      "question_summary": "<@U0ADFAJU5DM> *#11404 Unable to fulfill, has an address issue. Not sure if USPS has that address blocked.*",
+      "recommended_action": {
+        "customer_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+        "escalation_reason": "placeholder_account_id",
+        "reply_type": "investigating",
+        "should_escalate": true,
+        "status": "waiting_human"
+      },
+      "related_case_id": "case-a1b904e3e352397d",
+      "relationship_type": "follow_up",
+      "secondary_owner": "",
+      "shopify_store_domain": "",
+      "source_message_ts": "1774977314.985939",
+      "text": "<@U0ADFAJU5DM> *#11404 Unable to fulfill, has an address issue. Not sure if USPS has that address blocked.*",
+      "thread_ts": "1774977314.985939",
+      "ts": "1774977314.985939",
+      "ui_recommendation": "escalated",
+      "updated_at": "2026-03-31 23:13:11",
+      "waiting_on": "human"
+    },
+    {
+      "account_id": "",
+      "account_name": "akimbo-anatafulfillment",
+      "brand": "akimbo-anatafulfillment",
+      "brand_name": "akimbo-anatafulfillment",
+      "case_id": "case-b3090afe239e4479",
+      "channel": "akimbo-anatafulfillment",
+      "channel_id": "C09A97BN42D",
+      "channel_name": "akimbo-anatafulfillment",
+      "connection_status": "unmatched",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09A97BN42D/p1774973560181509",
+      "draft_reply": "Can you send the order number so I can pull this up?",
+      "escalation_reason": null,
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "missing_account_match",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: missing_account_match | Shopify: missing_store_match",
+      "identifiers": {
+        "order_numbers": [],
+        "po_numbers": [],
+        "reference_ids": [],
+        "shipment_ids": [],
+        "tracking_numbers": []
+      },
+      "issue_category": "waiting_on_customer",
+      "lifecycle_state": "investigating",
+      "permalink": "https://anatainc.slack.com/archives/C09A97BN42D/p1774973560181509",
+      "primary_owner": "U096MRDT28Y",
+      "question_summary": "OOS (CPT-TS-M) <@U0ADTDZG1D5> sent these orders to you last week but wondering if you had an update for them?",
+      "recommended_action": {
+        "customer_reply": "Can you send the order number so I can pull this up?",
+        "escalation_reason": "",
+        "reply_type": "clarifying",
+        "should_escalate": false,
+        "status": "investigating"
+      },
+      "related_case_id": "case-b3090afe239e4479",
+      "relationship_type": "follow_up",
+      "secondary_owner": "",
+      "shopify_store_domain": "",
+      "source_message_ts": "1774973560.181509",
+      "text": "OOS (CPT-TS-M) <@U0ADTDZG1D5> sent these orders to you last week but wondering if you had an update for them?",
+      "thread_ts": "1774973560.181509",
+      "ts": "1774973560.181509",
+      "ui_recommendation": "clarifying",
+      "updated_at": "2026-03-31 23:13:11",
+      "waiting_on": "customer"
+    }
+  ],
+  "escalations": [
+    {
+      "case_id": "case-7d714839b61eab1f",
+      "channel_name": "akimbo-anatafulfillment",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09A97BN42D/p1774987268722889",
+      "reason": "match_missing"
+    },
+    {
+      "case_id": "case-a1b904e3e352397d",
+      "channel_name": "color-by-feliks-anatafulfillment",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09MWJ9UA4E/p1774977314985939",
+      "reason": "placeholder_account_id"
+    }
+  ],
+  "generated_at": "2026-03-31T17:13:05.854700-06:00",
+  "lifecycle_counts": {
+    "escalated": 0,
+    "investigating": 1,
+    "new": 0,
+    "resolved": 0,
+    "responded": 0,
+    "waiting_human": 2
+  },
+  "links": {
+    "latest": "/admin/fulfillment-cs/reports/latest",
+    "reports_index": "/admin/fulfillment-cs/reports/",
+    "self_html": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-05.854700-06-00",
+    "self_json": "/admin/fulfillment-cs/reports/support-review-2026-03-31T17-13-05.854700-06-00.json"
+  },
+  "recent_candidates": [
+    {
+      "account_id": "",
+      "account_name": "akimbo-anatafulfillment",
+      "brand": "akimbo-anatafulfillment",
+      "brand_name": "akimbo-anatafulfillment",
+      "case_id": "case-7d714839b61eab1f",
+      "channel": "akimbo-anatafulfillment",
+      "channel_id": "C09A97BN42D",
+      "channel_name": "akimbo-anatafulfillment",
+      "connection_status": "unmatched",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09A97BN42D/p1774987268722889",
+      "draft_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+      "escalation_reason": "match_missing",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "missing_account_match",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: missing_account_match | Shopify: missing_store_match",
+      "identifiers": {
+        "order_numbers": [
+          "109823"
+        ],
+        "po_numbers": [],
+        "reference_ids": [],
+        "shipment_ids": [],
+        "tracking_numbers": []
+      },
+      "issue_category": "match_missing",
+      "lifecycle_state": "waiting_human",
+      "permalink": "https://anatainc.slack.com/archives/C09A97BN42D/p1774987268722889",
+      "primary_owner": "U096MRDT28Y",
+      "question_summary": "*#109823\n\nCan we please make sure the black sweatpants in this order have the white tag. NOT the blue.\n\n<@U096MRDT28Y>* *<@U063WD0MSPM> \n\nThanks guys!* | Wanting to send out the new fit, not the old",
+      "recommended_action": {
+        "customer_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+        "escalation_reason": "match_missing",
+        "reply_type": "investigating",
+        "should_escalate": true,
+        "status": "waiting_human"
+      },
+      "related_case_id": "case-7d714839b61eab1f",
+      "relationship_type": "follow_up",
+      "secondary_owner": "",
+      "shopify_store_domain": "",
+      "source_message_ts": "1774987268.722889",
+      "text": "*#109823\n\nCan we please make sure the black sweatpants in this order have the white tag. NOT the blue.\n\n<@U096MRDT28Y>* *<@U063WD0MSPM> \n\nThanks guys!* | Wanting to send out the new fit, not the old",
+      "thread_ts": "1774987268.722889",
+      "ts": "1774987268.722889",
+      "ui_recommendation": "escalated",
+      "updated_at": "2026-03-31 23:13:11",
+      "waiting_on": "human"
+    },
+    {
+      "account_id": "pending:colorbyfeliks",
+      "account_name": "ColorByFeliks",
+      "brand": "ColorByFeliks",
+      "brand_name": "ColorByFeliks",
+      "case_id": "case-a1b904e3e352397d",
+      "channel": "color-by-feliks-anatafulfillment",
+      "channel_id": "C09MWJ9UA4E",
+      "channel_name": "color-by-feliks-anatafulfillment",
+      "connection_status": "partial",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09MWJ9UA4E/p1774977314985939",
+      "draft_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+      "escalation_reason": "placeholder_account_id",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "placeholder_account_id",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: placeholder_account_id | Shopify: missing_store_match",
+      "identifiers": {
+        "order_numbers": [
+          "11404"
+        ],
+        "po_numbers": [],
+        "reference_ids": [],
+        "shipment_ids": [],
+        "tracking_numbers": []
+      },
+      "issue_category": "placeholder_account_id",
+      "lifecycle_state": "waiting_human",
+      "permalink": "https://anatainc.slack.com/archives/C09MWJ9UA4E/p1774977314985939",
+      "primary_owner": "U096MRDT28Y",
+      "question_summary": "<@U0ADFAJU5DM> *#11404 Unable to fulfill, has an address issue. Not sure if USPS has that address blocked.*",
+      "recommended_action": {
+        "customer_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+        "escalation_reason": "placeholder_account_id",
+        "reply_type": "investigating",
+        "should_escalate": true,
+        "status": "waiting_human"
+      },
+      "related_case_id": "case-a1b904e3e352397d",
+      "relationship_type": "follow_up",
+      "secondary_owner": "",
+      "shopify_store_domain": "",
+      "source_message_ts": "1774977314.985939",
+      "text": "<@U0ADFAJU5DM> *#11404 Unable to fulfill, has an address issue. Not sure if USPS has that address blocked.*",
+      "thread_ts": "1774977314.985939",
+      "ts": "1774977314.985939",
+      "ui_recommendation": "escalated",
+      "updated_at": "2026-03-31 23:13:11",
+      "waiting_on": "human"
+    },
+    {
+      "account_id": "",
+      "account_name": "akimbo-anatafulfillment",
+      "brand": "akimbo-anatafulfillment",
+      "brand_name": "akimbo-anatafulfillment",
+      "case_id": "case-b3090afe239e4479",
+      "channel": "akimbo-anatafulfillment",
+      "channel_id": "C09A97BN42D",
+      "channel_name": "akimbo-anatafulfillment",
+      "connection_status": "unmatched",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09A97BN42D/p1774973560181509",
+      "draft_reply": "Can you send the order number so I can pull this up?",
+      "escalation_reason": null,
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "missing_account_match",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: missing_account_match | Shopify: missing_store_match",
+      "identifiers": {
+        "order_numbers": [],
+        "po_numbers": [],
+        "reference_ids": [],
+        "shipment_ids": [],
+        "tracking_numbers": []
+      },
+      "issue_category": "waiting_on_customer",
+      "lifecycle_state": "investigating",
+      "permalink": "https://anatainc.slack.com/archives/C09A97BN42D/p1774973560181509",
+      "primary_owner": "U096MRDT28Y",
+      "question_summary": "OOS (CPT-TS-M) <@U0ADTDZG1D5> sent these orders to you last week but wondering if you had an update for them?",
+      "recommended_action": {
+        "customer_reply": "Can you send the order number so I can pull this up?",
+        "escalation_reason": "",
+        "reply_type": "clarifying",
+        "should_escalate": false,
+        "status": "investigating"
+      },
+      "related_case_id": "case-b3090afe239e4479",
+      "relationship_type": "follow_up",
+      "secondary_owner": "",
+      "shopify_store_domain": "",
+      "source_message_ts": "1774973560.181509",
+      "text": "OOS (CPT-TS-M) <@U0ADTDZG1D5> sent these orders to you last week but wondering if you had an update for them?",
+      "thread_ts": "1774973560.181509",
+      "ts": "1774973560.181509",
+      "ui_recommendation": "clarifying",
+      "updated_at": "2026-03-31 23:13:11",
+      "waiting_on": "customer"
+    }
+  ],
+  "reply_type_counts": {
+    "clarifying": 1,
+    "investigating": 2
+  },
+  "report_id": "2026-03-31T17-13-05.854700-06-00",
+  "report_slug": "support-review-2026-03-31T17-13-05.854700-06-00",
+  "schema_version": "1.0",
+  "status": "ready",
+  "summary": {
+    "account_counts": [
+      {
+        "account_id": "",
+        "account_name": "akimbo-anatafulfillment",
+        "count": 2
+      },
+      {
+        "account_id": "pending:colorbyfeliks",
+        "account_name": "ColorByFeliks",
+        "count": 1
+      }
+    ],
+    "action_counts": {
+      "clarifying": 1,
+      "escalated": 2,
+      "investigating": 0,
+      "ready_to_answer": 0,
+      "resolved": 0
+    },
+    "brand_counts": [
+      {
+        "brand": "akimbo-anatafulfillment",
+        "count": 2
+      },
+      {
+        "brand": "ColorByFeliks",
+        "count": 1
+      }
+    ],
+    "candidate_count": 3,
+    "escalation_count": 2,
+    "lifecycle_counts": {
+      "escalated": 0,
+      "investigating": 1,
+      "new": 0,
+      "resolved": 0,
+      "responded": 0,
+      "waiting_human": 2
+    },
+    "unresolved_count": 3
+  },
+  "title": "Fulfillment CS Review",
+  "warnings": []
+}

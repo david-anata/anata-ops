@@ -1,0 +1,93 @@
+[
+  {
+    "account_id": "a041ec71-b60b-4227-b993-f0c7f09a77a9",
+    "account_name": "Bamboo Avenue",
+    "aliases": ["bamboo avenue", "bamboo", "bambooave"]
+  },
+  {
+    "account_id": "61de0905-78e4-4300-a34d-58a0bc6cfcd7",
+    "account_name": "Chirag",
+    "aliases": ["chirag"]
+  },
+  {
+    "account_id": "12d586bb-f559-4330-ca31-52f8128a0d65",
+    "account_name": "Cloud 9",
+    "aliases": ["cloud 9", "cloud9"]
+  },
+  {
+    "account_id": "e8be9c6f-90c1-4e24-8270-321734cb4438",
+    "account_name": "ColorByFeliks",
+    "aliases": ["color by feliks", "colorbyfeliks", "feliks"]
+  },
+  {
+    "account_id": "68fbb1e2-998c-4af6-aa1e-e15a4e080dd3",
+    "account_name": "Fire in a Bottle",
+    "aliases": ["fire in a bottle", "fire-in-a-bottle"]
+  },
+  {
+    "account_id": "911ed7e1-cad5-4c60-b849-9904e7aa79b7",
+    "account_name": "Kranken",
+    "aliases": ["kranken"]
+  },
+  {
+    "account_id": "0e61793d-d52a-4f37-c6f4-a7d0e3dbefd3",
+    "account_name": "Luxmery",
+    "aliases": ["luxmery"]
+  },
+  {
+    "account_id": "pending:mule-deer-foundation",
+    "account_name": "Mule Deer Foundation",
+    "aliases": ["mule deer foundation", "mule deer"]
+  },
+  {
+    "account_id": "37f57991-2dcc-44b9-cfd6-ffe6596ddee3",
+    "account_name": "OceanRx",
+    "aliases": ["oceanrx", "ocean rx"]
+  },
+  {
+    "account_id": "85fed166-73c5-4ed6-eab8-a989bb413251",
+    "account_name": "Petite Moss",
+    "aliases": ["petite moss"]
+  },
+  {
+    "account_id": "1e4c0719-d6f9-465e-c089-70f032b35df9",
+    "account_name": "Pikora",
+    "aliases": ["pikora"]
+  },
+  {
+    "account_id": "92654fdd-f859-4db9-ad7d-d4c11978f6b0",
+    "account_name": "Platinum John",
+    "aliases": ["platinum john"]
+  },
+  {
+    "account_id": "08e43bc0-e746-4025-aef5-275ef34c1a41",
+    "account_name": "Project Solar",
+    "aliases": ["project solar"]
+  },
+  {
+    "account_id": "c4ad98c7-eb12-4cd8-d23c-1092a76a0857",
+    "account_name": "PupTale",
+    "aliases": ["puptale", "pup tale"]
+  },
+  {
+    "account_id": "e8985d39-0dcc-442a-c0e2-db8acc858918",
+    "account_name": "The Sensory Project",
+    "aliases": ["the sensory project", "sensory project"]
+  },
+  {
+    "account_id": "b00f601d-8a9e-4050-cd38-9debd6f523e5",
+    "account_name": "WACKYwalk'r",
+    "aliases": ["wackywalkr", "wackywalk'r"]
+  },
+  {
+    "account_id": "9afa833e-1884-4de4-d75a-a9c854415d20
+",
+    "account_name": "Water Scents",
+    "aliases": ["water scents"]
+  },
+  {
+    "account_id": "85e0231b-da10-42cc-9c08-e6f29a3e97a5w",
+    "account_name": "anata",
+    "aliases": ["anata"]
+  }
+]

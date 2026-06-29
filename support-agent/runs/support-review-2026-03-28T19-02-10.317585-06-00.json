@@ -1,0 +1,189 @@
+{
+  "action_counts": {
+    "clarifying": 0,
+    "escalated": 1,
+    "investigating": 0,
+    "ready_to_answer": 0,
+    "resolved": 0
+  },
+  "candidate_count": 1,
+  "candidates": [
+    {
+      "account_id": "",
+      "account_name": "anata-wanderlost",
+      "brand": "anata-wanderlost",
+      "brand_name": "anata-wanderlost",
+      "case_id": "case-d881437358da23ba",
+      "channel": "anata-wanderlost",
+      "channel_id": "C09G6E2LPUZ",
+      "channel_name": "anata-wanderlost",
+      "connection_status": "unmatched",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09G6E2LPUZ/p1774731985920699",
+      "draft_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+      "escalation_reason": "match_missing",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "missing_account_match",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: missing_account_match | Shopify: missing_store_match",
+      "external": true,
+      "identifiers": {
+        "order_numbers": [
+          "PCORN",
+          "PPER"
+        ],
+        "tracking_numbers": []
+      },
+      "lifecycle_state": "waiting_human",
+      "permalink": "https://anatainc.slack.com/archives/C09G6E2LPUZ/p1774731985920699",
+      "question_summary": "FYI I just grabbed one popcorn popper for videos!",
+      "recommended_action": {
+        "customer_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+        "escalation_reason": "match_missing",
+        "reply_type": "investigating",
+        "should_escalate": true,
+        "status": "waiting_human"
+      },
+      "shopify_store_domain": "",
+      "source_message_ts": "1774731985.920699",
+      "source_team": "T08KSDALNKG",
+      "text": "FYI I just grabbed one popcorn popper for videos!",
+      "thread_ts": "1774731985.920699",
+      "ts": "1774731985.920699",
+      "ui_recommendation": "escalated",
+      "updated_at": "2026-03-28T19:02:10.317585-06:00",
+      "user": "U08KSDALRJA",
+      "user_team": "T08KSDALNKG"
+    }
+  ],
+  "escalations": [
+    {
+      "case_id": "case-d881437358da23ba",
+      "channel_name": "anata-wanderlost",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09G6E2LPUZ/p1774731985920699",
+      "reason": "match_missing"
+    }
+  ],
+  "generated_at": "2026-03-28T19:02:10.317585-06:00",
+  "lifecycle_counts": {
+    "escalated": 0,
+    "investigating": 0,
+    "new": 0,
+    "resolved": 0,
+    "responded": 0,
+    "waiting_human": 1
+  },
+  "links": {
+    "latest": "/admin/fulfillment-cs/reports/latest",
+    "reports_index": "/admin/fulfillment-cs/reports/",
+    "self_html": "/admin/fulfillment-cs/reports/support-review-2026-03-28T19-02-10.317585-06-00",
+    "self_json": "/admin/fulfillment-cs/reports/support-review-2026-03-28T19-02-10.317585-06-00.json"
+  },
+  "recent_candidates": [
+    {
+      "account_id": "",
+      "account_name": "anata-wanderlost",
+      "brand": "anata-wanderlost",
+      "brand_name": "anata-wanderlost",
+      "case_id": "case-d881437358da23ba",
+      "channel": "anata-wanderlost",
+      "channel_id": "C09G6E2LPUZ",
+      "channel_name": "anata-wanderlost",
+      "connection_status": "unmatched",
+      "customer_thread_link": "https://anatainc.slack.com/archives/C09G6E2LPUZ/p1774731985920699",
+      "draft_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+      "escalation_reason": "match_missing",
+      "evidence": {
+        "labelogics": {
+          "confidence": "none",
+          "reason": "missing_account_match",
+          "summary": ""
+        },
+        "shopify": {
+          "confidence": "none",
+          "reason": "missing_store_match",
+          "summary": ""
+        }
+      },
+      "evidence_summary": "Labelogics: missing_account_match | Shopify: missing_store_match",
+      "external": true,
+      "identifiers": {
+        "order_numbers": [
+          "PCORN",
+          "PPER"
+        ],
+        "tracking_numbers": []
+      },
+      "lifecycle_state": "waiting_human",
+      "permalink": "https://anatainc.slack.com/archives/C09G6E2LPUZ/p1774731985920699",
+      "question_summary": "FYI I just grabbed one popcorn popper for videos!",
+      "recommended_action": {
+        "customer_reply": "I\u2019m looking into this now. I\u2019ve escalated it with our fulfillment team and will update this thread as soon as I have more information.",
+        "escalation_reason": "match_missing",
+        "reply_type": "investigating",
+        "should_escalate": true,
+        "status": "waiting_human"
+      },
+      "shopify_store_domain": "",
+      "source_message_ts": "1774731985.920699",
+      "source_team": "T08KSDALNKG",
+      "text": "FYI I just grabbed one popcorn popper for videos!",
+      "thread_ts": "1774731985.920699",
+      "ts": "1774731985.920699",
+      "ui_recommendation": "escalated",
+      "updated_at": "2026-03-28T19:02:10.317585-06:00",
+      "user": "U08KSDALRJA",
+      "user_team": "T08KSDALNKG"
+    }
+  ],
+  "reply_type_counts": {
+    "investigating": 1
+  },
+  "report_id": "2026-03-28T19-02-10.317585-06-00",
+  "report_slug": "support-review-2026-03-28T19-02-10.317585-06-00",
+  "schema_version": "1.0",
+  "status": "ready",
+  "summary": {
+    "account_counts": [
+      {
+        "account_id": "",
+        "account_name": "anata-wanderlost",
+        "count": 1
+      }
+    ],
+    "action_counts": {
+      "clarifying": 0,
+      "escalated": 1,
+      "investigating": 0,
+      "ready_to_answer": 0,
+      "resolved": 0
+    },
+    "brand_counts": [
+      {
+        "brand": "anata-wanderlost",
+        "count": 1
+      }
+    ],
+    "candidate_count": 1,
+    "escalation_count": 1,
+    "lifecycle_counts": {
+      "escalated": 0,
+      "investigating": 0,
+      "new": 0,
+      "resolved": 0,
+      "responded": 0,
+      "waiting_human": 1
+    },
+    "unresolved_count": 1
+  },
+  "title": "Fulfillment CS Review",
+  "warnings": []
+}
