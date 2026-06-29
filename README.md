@@ -76,8 +76,6 @@ export AP_TRANSACTIONS_AUTH_TOKEN='machine-download-token'
 
 Authentication is fail-closed by default. Browser access to the AP inbox, `/latest.csv`, `/upload`, `/admin/*`, and `/website-ops/*` requires `AP_ADMIN_USERNAME` and `AP_ADMIN_PASSWORD`; machine downloads of `/latest.csv` require a configured matching `AP_UPLOAD_TOKEN`. For temporary local-only development, set `ANATA_ALLOW_UNAUTHENTICATED_LOCAL=true`.
 
-If hosted admin verification is blocked by Gmail/Google-only login, set a separate `ANATA_ADMIN_READONLY_TOKEN` and call GET-only admin/report pages with `Authorization: Bearer <token>`. This is intended for smoke checks of rendered admin pages and report artifacts; POST/write routes still require a signed admin browser session.
-
 The service stores:
 
 - the current file as `latest.csv`
@@ -107,7 +105,6 @@ Recommended Render env wiring:
   - `AP_ADMIN_USERNAME`
   - `AP_ADMIN_PASSWORD`
   - `AP_SESSION_SECRET`
-  - `ANATA_ADMIN_READONLY_TOKEN` for GET-only smoke checks when SSO blocks automated verification
   - `CLICKUP_API_TOKEN`
   - `CLICKUP_LIST_ID`
   - `QBO_CLIENT_ID`

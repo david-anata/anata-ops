@@ -66,10 +66,6 @@ def machine_token() -> str:
     return os.getenv("AP_UPLOAD_TOKEN", "").strip()
 
 
-def admin_readonly_token() -> str:
-    return os.getenv("ANATA_ADMIN_READONLY_TOKEN", "").strip()
-
-
 def admin_username() -> str:
     return os.getenv("AP_ADMIN_USERNAME", "").strip()
 
@@ -216,19 +212,6 @@ def token_is_valid(token: str) -> bool:
     if not configured:
         return False
     return bool(token) and token == configured
-
-
-def admin_readonly_token_is_valid(token: str) -> bool:
-    configured = admin_readonly_token()
-    if not configured:
-        return False
-    return bool(token) and hmac.compare_digest(token, configured)
-
-
-def request_has_admin_readonly_access(environ: Dict[str, Any]) -> bool:
-    if environ.get("REQUEST_METHOD", "GET").upper() != "GET":
-        return False
-    return admin_readonly_token_is_valid(request_token(environ))
 
 
 def parse_cookie_header(environ: Dict[str, Any]) -> Dict[str, str]:
@@ -384,8 +367,6 @@ def unauthorized_response(environ: Dict[str, Any], start_response: Any, login_re
 
 def require_admin_request(environ: Dict[str, Any], start_response: Any) -> Optional[Iterable[bytes]]:
     if unauthenticated_local_bypass_enabled():
-        return None
-    if request_has_admin_readonly_access(environ):
         return None
     missing = admin_auth_missing_env()
     if missing:
