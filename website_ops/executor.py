@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
-from .core import WebsiteOpsConfig, collect_page_observation, load_config
+from .core import WebsiteOpsConfig, collect_page_observation, load_config, validate_feedback_action_payload
 
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
@@ -165,6 +165,9 @@ def execute_feedback_action(
 ) -> Dict[str, Any]:
     config = config or load_config()
     timestamp = timestamp or datetime.now(timezone.utc)
+    action_errors = validate_feedback_action_payload(feedback)
+    if action_errors:
+        raise ExecutionError("; ".join(action_errors))
     action_type = str(feedback.get("action_type", "")).strip()
     if action_type != "replace_primary_heading":
         raise ExecutionError(f"Unsupported action_type: {action_type or 'missing'}")

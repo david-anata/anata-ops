@@ -62,6 +62,28 @@ class WebsiteOpsTests(unittest.TestCase):
         self.assertIn("Replace the H1 with a topic-specific heading", "\n".join(report["recommendations"]))
         self.assertEqual(report["feedback_received"], 1)
         self.assertEqual(report["feedback_open"], 1)
+        self.assertEqual(report["action_counts_by_mode"]["approval-required"], 1)
+        self.assertEqual(report["feedback_action_counts_by_mode"]["manual-only"], 1)
+
+    def test_action_registry_validates_supported_feedback_actions(self):
+        definitions = website_ops.website_ops_action_definitions()
+        self.assertIn("replace_primary_heading", {item["action_type"] for item in definitions})
+        self.assertEqual(
+            website_ops.validate_feedback_action_payload(
+                {"action_type": "replace_primary_heading", "action_value": "Sharper H1"}
+            ),
+            [],
+        )
+        self.assertTrue(
+            website_ops.validate_feedback_action_payload(
+                {"action_type": "replace_primary_heading", "action_value": ""}
+            )
+        )
+        self.assertTrue(
+            website_ops.validate_feedback_action_payload(
+                {"action_type": "unsupported_action", "action_value": "Value"}
+            )
+        )
 
     def test_write_daily_report_artifacts_persists_json_markdown_and_html(self):
         report = website_ops.build_daily_report(

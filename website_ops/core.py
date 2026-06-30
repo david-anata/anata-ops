@@ -49,6 +49,81 @@ CTA_PATH_HINTS = (
 
 PRIORITY_ORDER = {"P0": 0, "P1": 1, "P2": 2, "P3": 3}
 
+WEBSITE_OPS_ACTION_DEFINITIONS: Dict[str, Dict[str, Any]] = {
+    "replace_primary_heading": {
+        "action_type": "replace_primary_heading",
+        "label": "Replace page H1",
+        "description": "Update the page's main H1 in WordPress, then verify the live page shows the approved text.",
+        "action_category": "content clarity",
+        "resolution_mode": "approval-required",
+        "executable": True,
+        "required_fields": ["action_value"],
+        "value_label": "Replacement H1",
+        "value_placeholder": "Enter the replacement H1 text",
+    },
+}
+
+ACTION_MODE_LABELS = {
+    "auto-resolvable": "Ready to run",
+    "approval-required": "Needs approval",
+    "manual-only": "Manual review",
+}
+
+ISSUE_ACTION_REGISTRY: Dict[str, Dict[str, str]] = {
+    "UNREACHABLE": {
+        "action_type": "restore_or_redirect_url",
+        "action_category": "route / canonical",
+        "resolution_mode": "manual-only",
+        "operator_prompt": "Verify the URL, DNS, and origin before content work continues.",
+    },
+    "HTTP_ERROR": {
+        "action_type": "restore_or_redirect_url",
+        "action_category": "route / canonical",
+        "resolution_mode": "manual-only",
+        "operator_prompt": "Restore a 2xx response or route this URL to the canonical page.",
+    },
+    "MISSING_TITLE": {
+        "action_type": "update_title_tag",
+        "action_category": "structural SEO",
+        "resolution_mode": "manual-only",
+        "operator_prompt": "Draft and publish a unique title tag in WordPress.",
+    },
+    "MISSING_H1": {
+        "action_type": "replace_primary_heading",
+        "action_category": "content clarity",
+        "resolution_mode": "approval-required",
+        "operator_prompt": "Provide the exact H1, approve it, then let the safe executor apply it.",
+    },
+    "MULTIPLE_H1": {
+        "action_type": "normalize_heading_structure",
+        "action_category": "structural SEO",
+        "resolution_mode": "manual-only",
+        "operator_prompt": "Choose the primary H1 and demote the extra headings in the page builder.",
+    },
+    "GENERIC_PRIMARY_HEADING": {
+        "action_type": "replace_primary_heading",
+        "action_category": "content clarity",
+        "resolution_mode": "approval-required",
+        "operator_prompt": "Approve a topic-specific H1 so the safe executor can replace the generic heading.",
+    },
+    "MISSING_CANONICAL": {
+        "action_type": "add_canonical_url",
+        "action_category": "route / canonical",
+        "resolution_mode": "manual-only",
+        "operator_prompt": "Confirm the canonical URL and add it through the SEO/page settings.",
+    },
+    "NOINDEX": {
+        "action_type": "remove_noindex",
+        "action_category": "structural SEO",
+        "resolution_mode": "manual-only",
+        "operator_prompt": "Confirm the page should be public, then remove noindex from SEO settings.",
+    },
+}
+
+EXECUTABLE_ACTION_TYPES = {
+    key for key, definition in WEBSITE_OPS_ACTION_DEFINITIONS.items() if bool(definition.get("executable"))
+}
+
 
 @dataclass(frozen=True)
 class WebsiteOpsConfig:
@@ -369,6 +444,94 @@ def make_issue(
     return issue
 
 
+def website_ops_action_definitions() -> List[Dict[str, Any]]:
+    return [dict(WEBSITE_OPS_ACTION_DEFINITIONS[key]) for key in sorted(WEBSITE_OPS_ACTION_DEFINITIONS)]
+
+
+def get_website_ops_action_definition(action_type: str) -> Optional[Dict[str, Any]]:
+    definition = WEBSITE_OPS_ACTION_DEFINITIONS.get(normalize_text(action_type))
+    return dict(definition) if definition else None
+
+
+def action_mode_label(mode: str) -> str:
+    normalized = normalize_key(mode).replace(" ", "-")
+    return ACTION_MODE_LABELS.get(normalized, str(mode or "Manual review").replace("_", " ").replace("-", " ").title())
+
+
+def action_type_label(action_type: str) -> str:
+    normalized = normalize_text(action_type)
+    definition = get_website_ops_action_definition(normalized)
+    if definition:
+        return str(definition.get("label") or normalized.replace("_", " ").title())
+    return normalized.replace("_", " ").replace("-", " ").title() if normalized else "Manual review"
+
+
+def validate_feedback_action_payload(payload: Mapping[str, Any]) -> List[str]:
+    action_type = normalize_text(payload.get("action_type", ""))
+    if not action_type:
+        return []
+    definition = get_website_ops_action_definition(action_type)
+    if not definition:
+        return [f"Unsupported Website Ops action type: {action_type}."]
+    errors: List[str] = []
+    for field_name in definition.get("required_fields", []):
+        if not normalize_text(payload.get(str(field_name), "")):
+            label = str(definition.get("value_label") or field_name).strip()
+            errors.append(f"{label} is required for {definition.get('label', action_type)}.")
+    return errors
+
+
+def action_for_issue(issue: Mapping[str, Any]) -> Dict[str, str]:
+    code = str(issue.get("code", "")).strip()
+    action = dict(ISSUE_ACTION_REGISTRY.get(code, {}))
+    if not action:
+        action = {
+            "action_type": "manual_review",
+            "action_category": "measurement / analytics",
+            "resolution_mode": "manual-only",
+            "operator_prompt": "Review this issue and define the next safe action.",
+        }
+    action["issue_code"] = code or "UNKNOWN"
+    return action
+
+
+def enrich_issue_action(issue: Mapping[str, Any]) -> Dict[str, Any]:
+    enriched = dict(issue)
+    enriched["action"] = action_for_issue(enriched)
+    return enriched
+
+
+def action_for_feedback(feedback: Mapping[str, Any]) -> Dict[str, str]:
+    action_type = normalize_text(feedback.get("action_type", ""))
+    status = normalize_key(feedback.get("status", "new")).replace(" ", "-") or "new"
+    definition = get_website_ops_action_definition(action_type)
+    if definition and bool(definition.get("executable")):
+        resolution_mode = "auto-resolvable" if status == "approved" else "approval-required"
+        return {
+            "action_type": action_type,
+            "action_category": str(definition.get("action_category", "content clarity")),
+            "resolution_mode": resolution_mode,
+            "operator_prompt": (
+                "Ready to run on the next Website Ops pass."
+                if resolution_mode == "auto-resolvable"
+                else "Approve this after the exact replacement text is confirmed."
+            ),
+        }
+    if action_type:
+        return {
+            "action_type": action_type,
+            "action_category": "measurement / analytics",
+            "resolution_mode": "manual-only",
+            "operator_prompt": "This action is recorded but does not have a safe executor yet.",
+        }
+    return {
+        "action_type": "manual_review",
+        "action_category": normalize_text(feedback.get("category", "")) or "general",
+        "resolution_mode": "manual-only",
+        "operator_prompt": "Define the exact action before this can be approved for execution.",
+    }
+
+
 def detect_page_issues(observation: Mapping[str, Any]) -> List[Dict[str, Any]]:
     url = str(observation.get("url") or "")
     issues: List[Dict[str, Any]] = []
@@ -390,7 +553,7 @@ def detect_page_issues(observation: Mapping[str, Any]) -> List[Dict[str, Any]]:
                 details={"response_error": response_error, "status_code": status_code},
             )
         )
-        return issues
+        return [enrich_issue_action(issue) for issue in issues]
 
     if int(status_code) >= 400:
         issues.append(
@@ -472,7 +635,7 @@ def detect_page_issues(observation: Mapping[str, Any]) -> List[Dict[str, Any]]:
             )
         )
 
-    return issues
+    return [enrich_issue_action(issue) for issue in issues]
 
 
 def page_status_from_issues(issues: Sequence[Mapping[str, Any]], *, status_code: Optional[int] = None) -> str:
@@ -513,7 +676,7 @@ def build_daily_report(
     pages: List[Dict[str, Any]] = []
     issues: List[Dict[str, Any]] = []
     for observation in observations:
-        obs_issues = list(observation.get("issues") or detect_page_issues(observation))
+        obs_issues = [enrich_issue_action(issue) for issue in (observation.get("issues") or detect_page_issues(observation))]
         page = dict(observation)
         page["issues"] = obs_issues
         page["issue_count"] = len(obs_issues)
@@ -524,6 +687,7 @@ def build_daily_report(
 
     issue_counts_by_priority = Counter(str(issue.get("priority", "P3")) for issue in issues)
     issue_counts_by_code = Counter(str(issue.get("code", "UNKNOWN")) for issue in issues)
+    action_counts_by_mode = Counter(str(issue.get("action", {}).get("resolution_mode", "manual-only")) for issue in issues)
     pages_with_issues = sum(1 for page in pages if page["issues"])
     recommendations = unique_preserving(
         issue["recommendation"] for issue in sorted_issues(issues)
@@ -543,9 +707,11 @@ def build_daily_report(
             "summary": item.get("summary") or item.get("title", ""),
             "page_url": item.get("page_url", ""),
             "status": item.get("status", ""),
+            "action": action_for_feedback(item),
         }
         for item in feedback_records[:5]
     ]
+    feedback_action_counts = Counter(action_for_feedback(item)["resolution_mode"] for item in open_feedback)
     executed_records = [dict(item) for item in (executed_actions or [])]
 
     return {
@@ -562,12 +728,14 @@ def build_daily_report(
         "issues_found": len(issues),
         "issue_counts_by_priority": {key: issue_counts_by_priority.get(key, 0) for key in ["P0", "P1", "P2", "P3"]},
         "issue_counts_by_code": dict(sorted(issue_counts_by_code.items(), key=lambda item: (-item[1], item[0]))),
+        "action_counts_by_mode": {key: action_counts_by_mode.get(key, 0) for key in ["auto-resolvable", "approval-required", "manual-only"]},
         "pages": pages,
         "issues": sorted_issues(issues),
         "recommendations": recommendations,
         "notes": list(notes or []),
         "feedback_received": len(feedback_records),
         "feedback_open": len(open_feedback),
+        "feedback_action_counts_by_mode": {key: feedback_action_counts.get(key, 0) for key in ["auto-resolvable", "approval-required", "manual-only"]},
         "recent_feedback": recent_feedback,
         "changes_applied": len(executed_records),
         "executed_actions": executed_records,
@@ -617,6 +785,10 @@ def render_daily_report_markdown(report: Mapping[str, Any]) -> str:
     for priority in ["P0", "P1", "P2", "P3"]:
         lines.append(f"- {priority}: `{report['issue_counts_by_priority'].get(priority, 0)}`")
 
+    lines.extend(["", "## Execution Readiness", ""])
+    for mode in ["auto-resolvable", "approval-required", "manual-only"]:
+        lines.append(f"- {action_mode_label(mode)}: `{report.get('action_counts_by_mode', {}).get(mode, 0)}`")
+
     lines.extend(
         [
             "",
@@ -657,11 +829,15 @@ def render_daily_report_markdown(report: Mapping[str, Any]) -> str:
     lines.extend(["", "## Issues Found"])
     if report.get("issues"):
         for issue in report["issues"]:
+            action = issue.get("action", {})
             lines.extend(
                 [
                     f"- `{issue['priority']}` `{issue['code']}` on `{issue['page_url']}`",
                     f"  - {issue['summary']}",
                     f"  - recommendation: {issue['recommendation']}",
+                    f"  - readiness: `{action_mode_label(str(action.get('resolution_mode', 'manual-only')))}`",
+                    f"  - action: `{action_type_label(str(action.get('action_type', 'manual_review')))}`",
+                    f"  - next: {action.get('operator_prompt', 'Review this issue and define the next safe action.')}",
                 ]
             )
     else:
@@ -701,12 +877,16 @@ def render_daily_report_html(report: Mapping[str, Any]) -> str:
 
     issue_rows = []
     for issue in report.get("issues", []):
+        action = issue.get("action", {})
         issue_rows.append(
             "<li>"
             f"<strong>{esc(issue['priority'])} {esc(issue['code'])}</strong> "
             f"on <code>{esc(issue['page_url'])}</code><br>"
             f"{esc(issue['summary'])}<br>"
             f"<span class=\"muted\">Recommendation:</span> {esc(issue['recommendation'])}"
+            f"<br><span class=\"muted\">Readiness:</span> {esc(action_mode_label(str(action.get('resolution_mode', 'manual-only'))))}"
+            f"<br><span class=\"muted\">Action:</span> {esc(action_type_label(str(action.get('action_type', 'manual_review'))))}"
+            f"<br><span class=\"muted\">Next:</span> {esc(action.get('operator_prompt', 'Review this issue and define the next safe action.'))}"
             "</li>"
         )
 
@@ -728,6 +908,10 @@ def render_daily_report_html(report: Mapping[str, Any]) -> str:
     issue_counts = "".join(
         f"<li><strong>{esc(priority)}</strong>: {esc(report['issue_counts_by_priority'].get(priority, 0))}</li>"
         for priority in ["P0", "P1", "P2", "P3"]
+    )
+    action_counts = "".join(
+        f"<li><strong>{esc(action_mode_label(mode))}</strong>: {esc(report.get('action_counts_by_mode', {}).get(mode, 0))}</li>"
+        for mode in ["auto-resolvable", "approval-required", "manual-only"]
     )
     feedback_rows = "".join(
         "<li>"
@@ -819,6 +1003,10 @@ def render_daily_report_html(report: Mapping[str, Any]) -> str:
     <div class="panel">
       <h2>Issue Mix</h2>
       <ul>{issue_counts}</ul>
+    </div>
+    <div class="panel">
+      <h2>Execution Readiness</h2>
+      <ul>{action_counts}</ul>
     </div>
     <div class="panel">
       <h2>Feedback Loop</h2>

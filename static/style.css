@@ -173,6 +173,12 @@ h3 {
   color: var(--anata-muted);
 }
 
+.hint {
+  color: var(--anata-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .slide-cover .muted {
   color: rgba(255, 255, 255, 0.70);
 }
@@ -1200,6 +1206,29 @@ textarea {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.action-readiness {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(29, 45, 68, 0.04);
+  border: 1px solid rgba(29, 45, 68, 0.08);
+}
+
+.action-readiness .badge {
+  justify-self: start;
+}
+
+.action-readiness strong,
+.action-readiness small,
+.action-readiness p {
+  margin: 0;
+}
+
+.action-readiness small {
+  color: var(--anata-muted);
 }
 
 .inline-action-form {

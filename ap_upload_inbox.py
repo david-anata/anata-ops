@@ -26,6 +26,7 @@ import hubspot_sales
 import hubspot_sales_os
 import qbo_client
 import support_agent
+import website_ops
 
 
 ROOT_DIR = Path(__file__).resolve().parent
@@ -804,6 +805,63 @@ def feedback_status_counts(entries: List[Dict[str, Any]]) -> Dict[str, int]:
     return counts
 
 
+def execute_approved_website_ops_actions() -> Dict[str, Any]:
+    if not website_ops.execution_enabled():
+        return {
+            "enabled": False,
+            "processed": 0,
+            "executed": 0,
+            "failed": 0,
+            "results": [],
+            "errors": [],
+            "message": "Set WEBSITE_OPS_EXECUTE_APPROVED=true to enable one-click execution.",
+        }
+    entries = [
+        item for item in load_feedback_submissions()
+        if normalize_feedback_status(str(item.get("status", ""))) == "approved"
+        and str(item.get("action_type", "")).strip()
+    ]
+    results: List[Dict[str, Any]] = []
+    errors: List[Dict[str, Any]] = []
+    for item in entries:
+        feedback_id = str(item.get("feedback_id", "") or Path(str(item.get("_path", ""))).stem)
+        try:
+            result = website_ops.execute_feedback_action(item)
+        except website_ops.ExecutionError as exc:
+            error_record = {
+                "feedback_id": feedback_id,
+                "error": str(exc),
+                "last_execution_at": datetime.now(timezone.utc).isoformat(),
+            }
+            errors.append(error_record)
+            website_ops.update_feedback_entry(
+                item,
+                {
+                    "status": "error",
+                    "execution_error": error_record["error"],
+                    "last_execution_at": error_record["last_execution_at"],
+                },
+            )
+            continue
+        results.append(dict(result))
+        website_ops.update_feedback_entry(
+            item,
+            {
+                "status": "done",
+                "last_execution_at": result.get("executed_at", datetime.now(timezone.utc).isoformat()),
+                "execution_result": result,
+            },
+        )
+    return {
+        "enabled": True,
+        "processed": len(entries),
+        "executed": len(results),
+        "failed": len(errors),
+        "results": results,
+        "errors": errors,
+    }
+
+
 def save_feedback_submission(payload: Dict[str, Any], environ: Dict[str, Any]) -> Dict[str, Any]:
     ensure_website_ops_storage()
     timestamp = datetime.now(timezone.utc)
@@ -852,12 +910,19 @@ def update_feedback_submission(submission_id: str, payload: Dict[str, Any], envi
     action_type = str(payload.get("action_type", "")).strip()
     action_value = str(payload.get("action_value", "")).strip()
     target_post_id = str(payload.get("target_post_id", "")).strip()
-    if action_type:
+    if "action_type" in payload and not action_type:
+        for key in ("action_type", "action_value", "target_post_id"):
+            record.pop(key, None)
+    elif action_type:
         record["action_type"] = action_type
-    if action_value:
-        record["action_value"] = action_value
-    if target_post_id:
-        record["target_post_id"] = target_post_id
+        if action_value:
+            record["action_value"] = action_value
+        else:
+            record.pop("action_value", None)
+        if target_post_id:
+            record["target_post_id"] = target_post_id
+        else:
+            record.pop("target_post_id", None)
     record["reviewed_at"] = timestamp
     record["review_source"] = str(payload.get("source", "dashboard")).strip() or "dashboard"
     record["review_user_agent"] = environ.get("HTTP_USER_AGENT", "")
@@ -905,6 +970,12 @@ def website_ops_status_message(query: Dict[str, str]) -> str:
         return "Choose a feedback category and summary before submitting."
     if status == "bad-json":
         return "Could not parse the JSON payload."
+    if status == "bad-action":
+        return "The selected Website Ops action is not supported or is missing required fields."
+    if status == "execution-disabled":
+        return "Website Ops execution is disabled for this environment."
+    if status == "execution-complete":
+        return "Approved Website Ops actions were processed."
     if status == "review-updated":
         return "Approval status updated."
     if status == "submission-not-found":
@@ -1277,7 +1348,7 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
     return f"""
       <div class="grid section-gap">
         <section class="card">
-          <h2 class="section-title">Analysis Overview</h2>
+          <h2 class="section-title">AP Decision Summary</h2>
           <div class="metric"><strong>Current review window spend</strong>{format_money(archive_analysis['total_current_spend'])}</div>
           <div class="metric"><strong>Transactions in review window</strong>{archive_analysis['current_transaction_count']}</div>
           <div class="metric"><strong>Lookback days</strong>{archive_analysis['lookback_days']}</div>
@@ -1306,8 +1377,8 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
       </div>
       <div class="grid section-gap">
         <section class="card">
-          <h2 class="section-title">Savings Opportunities</h2>
-          <p class="hint">Heuristic cut list. Use this to challenge spend aggressively every week.</p>
+          <h2 class="section-title">Spend to Challenge</h2>
+          <p class="hint">Review these vendors first before the next payment cycle.</p>
           {render_rows(archive_analysis['savings_opportunities'], [("Vendor", "vendor"), ("Amount", "amount"), ("Priority", "priority"), ("Reason", "reason"), ("Action", "action")])}
         </section>
         <section class="card">
@@ -1332,7 +1403,7 @@ def render_analysis_html(archive_analysis: Dict[str, Any], live_audit: Dict[str,
 def website_ops_nav() -> str:
     return """
       <div class="toolbar">
-        <p class="hint">Website ops report viewer, feedback intake, and backup browser.</p>
+        <p class="hint">Website decisions, approvals, live issue reports, and rollback files.</p>
         <div class="ops-nav">
           <a href="/website-ops">Dashboard</a>
           <a href="/website-ops/reports/">Reports</a>
@@ -1389,10 +1460,10 @@ def website_ops_dashboard_page(status_message: str, latest_report: Optional[Dict
     body = f"""
       {website_ops_nav()}
       <div class="grid section-gap">
-        {render_stat_card("Reports indexed", str(report_count), "Daily, weekly, and monthly markdown files.")}
-        {render_stat_card("Feedback records", str(feedback_count), "Structured JSON intake submissions.")}
+        {render_stat_card("Evidence reports", str(report_count), "Daily, weekly, and monthly issue reports.")}
+        {render_stat_card("Submitted issues", str(feedback_count), "Website issues and requests in the review queue.")}
         {render_stat_card("Awaiting review", str(status_counts.get('new', 0)), "New items not yet approved or rejected.")}
-        {render_stat_card("Approved", str(status_counts.get('approved', 0)), "Ready for execution on the next pass.")}
+        {render_stat_card("Approved", str(status_counts.get('approved', 0)), "Approved; will run only if execution is enabled.")}
         {render_stat_card("Latest report", latest_title, latest_report.get("date", "") if latest_report else "Awaiting first report.")}
       </div>
       <div class="grid section-gap">
@@ -1402,10 +1473,10 @@ def website_ops_dashboard_page(status_message: str, latest_report: Optional[Dict
           <p><a href="{html.escape(latest_url, quote=True)}">Open the latest report</a></p>
         </section>
         <section class="card">
-          <h2 class="section-title">Intake Paths</h2>
-          <p class="muted">Use the structured feedback form for page issues, SEO fixes, content requests, and technical notes.</p>
-          <p><a href="/website-ops/feedback">Submit feedback</a></p>
-          <p><a href="/website-ops/queue">Review approval queue</a></p>
+          <h2 class="section-title">Next Actions</h2>
+          <p class="muted">Add a page issue, review what is waiting, or open the latest reports before approving a fix.</p>
+          <p><a href="/website-ops/feedback">Add website issue</a></p>
+          <p><a href="/website-ops/queue">Review work queue</a></p>
           <p><a href="/website-ops/reports/">Browse report library</a></p>
         </section>
       </div>
@@ -1425,8 +1496,8 @@ def website_ops_dashboard_page(status_message: str, latest_report: Optional[Dict
     return page_shell(
         title="Anata Website Ops",
         eyebrow="Website Ops",
-        heading="Website Ops Command Center",
-        intro="View daily reports, inspect backups, and collect structured website feedback in one internal surface.",
+        heading="Website Ops Decision Queue",
+        intro="See what is broken, what is approved to run, and what needs an operator decision.",
         status_block=status_block,
         body=body,
     )
@@ -1470,7 +1541,7 @@ def website_ops_reports_index_page(status_message: str) -> str:
         title="Anata Website Ops Reports",
         eyebrow="Website Ops",
         heading="Report Library",
-        intro="Daily, weekly, and monthly report files rendered directly from the website-ops folder.",
+        intro="Daily, weekly, and monthly reports for website issues, fixes, and execution history.",
         status_block=status_block,
         body=body,
     )
@@ -1497,7 +1568,7 @@ def website_ops_report_category_page(category: str, status_message: str) -> str:
         title=f"Anata Website Ops Reports - {category.title()}",
         eyebrow="Website Ops",
         heading=f"{category.title()} Reports",
-        intro="Browse reports in this folder and open the rendered markdown details.",
+        intro="Open the latest report detail and review the issues, recommendations, and next actions.",
         status_block=status_block,
         body=body,
     )
@@ -1600,6 +1671,42 @@ def render_feedback_actions(item: Dict[str, Any]) -> str:
     return f'<div class="feedback-actions">{"".join(buttons)}</div>'
 
 
+def render_website_ops_action_options(selected_action: str = "") -> str:
+    selected = str(selected_action or "").strip()
+    options = ['<option value="">Manual review</option>']
+    for definition in website_ops.website_ops_action_definitions():
+        action_type = str(definition.get("action_type", "")).strip()
+        if not action_type:
+            continue
+        selected_attr = " selected" if selected == action_type else ""
+        options.append(
+            f'<option value="{html.escape(action_type, quote=True)}"{selected_attr}>{html.escape(str(definition.get("label", action_type)))}</option>'
+        )
+    return "".join(options)
+
+
+def render_feedback_action_readiness(item: Dict[str, Any]) -> str:
+    action = website_ops.action_for_feedback(item)
+    action_type = str(action.get("action_type", "manual_review"))
+    definition = website_ops.get_website_ops_action_definition(action_type) or {}
+    label = str(definition.get("label") or website_ops.action_type_label(action_type))
+    mode = str(action.get("resolution_mode", "manual-only"))
+    mode_label = website_ops.action_mode_label(mode)
+    detail_bits = [mode_label, str(action.get("action_category", "general"))]
+    if item.get("target_post_id"):
+        detail_bits.append(f"post {item.get('target_post_id')}")
+    if item.get("action_value"):
+        detail_bits.append(f"value: {item.get('action_value')}")
+    return (
+        '<div class="action-readiness">'
+        f'<span class="badge badge-muted">{html.escape(mode_label)}</span>'
+        f"<strong>{html.escape(label)}</strong>"
+        f"<small>{html.escape(' · '.join(detail_bits))}</small>"
+        f"<p class='hint'>{html.escape(str(action.get('operator_prompt', 'Define the next action.')))}</p>"
+        "</div>"
+    )
+
+
 def render_feedback_list(entries: List[Dict[str, Any]], *, include_actions: bool = False) -> str:
     if not entries:
         return "<p class='hint'>No feedback submitted yet.</p>"
@@ -1616,6 +1723,7 @@ def render_feedback_list(entries: List[Dict[str, Any]], *, include_actions: bool
                 <h3>{title_html}</h3>
                 <p class="muted">{html.escape(item.get('category', 'General'))} · {html.escape(item.get('priority', 'Medium'))} · {html.escape(feedback_status_label(str(item.get('status', 'new'))))}</p>
                 <p>{html.escape(item.get('page_url', '') or item.get('page_title', '') or 'No page specified')}</p>
+                {render_feedback_action_readiness(item)}
                 {render_feedback_actions(item) if include_actions else ""}
               </article>
             """
@@ -1632,21 +1740,27 @@ def website_ops_queue_page(status_message: str) -> str:
     body = f"""
       {website_ops_nav()}
       <div class="grid section-gap">
-        {render_stat_card("Open items", str(len(entries)), "Feedback records not yet resolved.")}
+        {render_stat_card("Open items", str(len(entries)), "Website issues not yet resolved.")}
         {render_stat_card("Urgent", str(len(urgent)), "Highest-priority queue items.")}
         {render_stat_card("Approved", str(len(approved)), "Ready for the next execution pass.")}
         {render_stat_card("New", str(counts.get('new', 0)), "Awaiting review.")}
       </div>
       <div class="card section-gap">
-        <h2 class="section-title">Open Queue</h2>
+        <div class="card-head">
+          <h2 class="section-title">Open Queue</h2>
+          <form action="/website-ops/actions/execute-approved" method="post" class="inline-action-form">
+            <button type="submit" class="ghost small">Run approved fixes</button>
+          </form>
+        </div>
+        <p class="hint">Runs approved fixes only. If execution is disabled, this records the blocker without changing WordPress.</p>
         {render_feedback_list(entries, include_actions=True)}
       </div>
     """
     return page_shell(
         title="Anata Website Ops Queue",
         eyebrow="Website Ops",
-        heading="Open Work Queue",
-        intro="Prioritized feedback records waiting for review, implementation, or closure.",
+        heading="Website Decisions Queue",
+        intro="Prioritized website issues waiting for a decision, approved fix, or closure.",
         status_block=status_block,
         body=body,
     )
@@ -1658,8 +1772,8 @@ def website_ops_feedback_page(status_message: str, feedback_entries: List[Dict[s
       {website_ops_nav()}
       <div class="feedback-layout section-gap">
         <section class="card card-form">
-          <h2 class="section-title">Submit Structured Feedback</h2>
-          <p class="hint">Capture what changed, where it happened, and what outcome is needed. Submissions are stored as JSON in the feedback inbox.</p>
+          <h2 class="section-title">Add Website Issue</h2>
+          <p class="hint">Capture the page, impact, and expected outcome so a reviewer can decide without follow-up.</p>
           <form action="/website-ops/feedback" method="post">
             <div class="feedback-grid">
               <div>
@@ -1716,7 +1830,7 @@ def website_ops_feedback_page(status_message: str, feedback_entries: List[Dict[s
                 <textarea id="recommended_fix" name="recommended_fix" rows="3" placeholder="Optional solution or implementation note."></textarea>
               </div>
             </div>
-            <button type="submit">Save Feedback</button>
+            <button type="submit">Add to Review Queue</button>
           </form>
         </section>
         <aside class="card">
@@ -1728,8 +1842,8 @@ def website_ops_feedback_page(status_message: str, feedback_entries: List[Dict[s
     return page_shell(
         title="Anata Website Ops Feedback",
         eyebrow="Website Ops",
-        heading="Structured Feedback Intake",
-        intro="Collect actionable website feedback with enough context to queue, prioritize, and hand off without extra clarification.",
+        heading="Add Website Issue",
+        intro="Create a review item with the page, problem, desired outcome, and proposed fix.",
         status_block=status_block,
         body=body,
     )
@@ -1749,7 +1863,7 @@ def website_ops_feedback_submissions_page(status_message: str) -> str:
         title="Anata Website Ops Feedback Inbox",
         eyebrow="Website Ops",
         heading="Feedback Inbox",
-        intro="Review all submitted website-ops feedback records.",
+        intro="Review submitted website issues and decide what should happen next.",
         status_block=status_block,
         body=body,
     )
@@ -1774,7 +1888,7 @@ def website_ops_feedback_submission_page(record: Dict[str, Any]) -> str:
         title="Anata Website Ops Feedback Saved",
         eyebrow="Website Ops",
         heading="Feedback Saved",
-        intro="The intake record is now stored as a JSON artifact for review and triage.",
+        intro="The item is now queued for review and triage.",
         status_block="",
         body=body,
     )
@@ -1803,7 +1917,7 @@ def website_ops_feedback_submission_detail(record: Dict[str, Any]) -> str:
           <p><strong>Details:</strong></p>
           <p>{html.escape(record.get('details', '') or 'No details provided.')}</p>
           <section class="card subtle-card">
-            <h3>Review and Approval</h3>
+            <h3>Decision and Approval</h3>
             <form action="/website-ops/feedback/submissions/{html.escape(record.get('feedback_id', ''), quote=True)}/status" method="post">
               <div class="feedback-grid">
                 <div>
@@ -1822,26 +1936,25 @@ def website_ops_feedback_submission_detail(record: Dict[str, Any]) -> str:
                   <input id="reviewer_name" name="reviewer_name" type="text" value="{html.escape(record.get('reviewer_name', ''), quote=True)}" placeholder="Optional reviewer name">
                 </div>
                 <div>
-                  <label for="action_type">Action Type</label>
+                  <label for="action_type">Fix to run</label>
                   <select id="action_type" name="action_type">
-                    <option value="">Manual only</option>
-                    <option value="replace_primary_heading" {'selected' if str(record.get('action_type', '')) == 'replace_primary_heading' else ''}>Replace Primary Heading</option>
+                    {render_website_ops_action_options(str(record.get('action_type', '')))}
                   </select>
                 </div>
                 <div>
-                  <label for="target_post_id">Target Post ID</label>
-                  <input id="target_post_id" name="target_post_id" type="text" value="{html.escape(record.get('target_post_id', ''), quote=True)}" placeholder="Optional WordPress post ID">
+                  <label for="target_post_id">WordPress page ID</label>
+                  <input id="target_post_id" name="target_post_id" type="text" value="{html.escape(record.get('target_post_id', ''), quote=True)}" placeholder="Optional page ID from WordPress">
                 </div>
                 <div class="feedback-span">
-                  <label for="action_value">Action Value</label>
+                  <label for="action_value">Approved replacement text</label>
                   <input id="action_value" name="action_value" type="text" value="{html.escape(record.get('action_value', ''), quote=True)}" placeholder="For heading changes, enter the new H1 text">
                 </div>
                 <div class="feedback-span">
-                  <label for="review_notes">Review Notes</label>
+                  <label for="review_notes">Decision notes</label>
                   <textarea id="review_notes" name="review_notes" rows="4" placeholder="Why this should be approved, rejected, or deferred.">{html.escape(record.get('review_notes', ''))}</textarea>
                 </div>
               </div>
-              <button type="submit">Submit Review</button>
+              <button type="submit">Save Decision</button>
             </form>
           </section>
         </article>
@@ -2853,6 +2966,15 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
         body = sales_os_guard_page(path)
         return text_response(start_response, "501 Not Implemented", body, "text/html; charset=utf-8")
 
+    if method == "POST" and path in {"/website-ops/actions/execute-approved", "/admin/api/website-ops/run"}:
+        result = execute_approved_website_ops_actions()
+        if wants_json_response(environ) or path.startswith("/admin/api/"):
+            status = "200 OK" if result.get("enabled") else "409 Conflict"
+            return json_response(start_response, status, {"ok": bool(result.get("enabled")), "result": result})
+        if not result.get("enabled"):
+            return redirect_response(start_response, "/website-ops/queue?status=execution-disabled")
+        return redirect_response(start_response, "/website-ops/queue?status=execution-complete")
+
     if method == "GET" and path == "/website-ops/":
         latest_report = latest_report_entry()
         feedback_entries = load_feedback_submissions()
@@ -2969,6 +3091,11 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
     if method == "POST" and path.startswith("/website-ops/feedback/submissions/") and path.endswith("/status"):
         submission_id = path.removeprefix("/website-ops/feedback/submissions/").removesuffix("/status").strip("/")
         payload = parse_feedback_request(environ)
+        action_errors = website_ops.validate_feedback_action_payload(payload)
+        if action_errors:
+            if wants_json_response(environ):
+                return json_response(start_response, "400 Bad Request", {"ok": False, "error": "bad-action", "errors": action_errors})
+            return redirect_response(start_response, f"/website-ops/feedback/submissions/{submission_id}?status=bad-action")
         record = update_feedback_submission(submission_id, payload, environ)
         if not record:
             if wants_json_response(environ):

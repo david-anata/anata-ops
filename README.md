@@ -163,12 +163,12 @@ The service refreshes access tokens as needed and persists the latest rotated re
 
 ## Website Ops
 
-The repo now also includes an internal website-ops surface for production SEO review and feedback intake:
+The repo now also includes an internal website-ops surface for production website issue detection, approval queue, and rollback review:
 
 - report library at `/website-ops/reports/`
 - latest report shortcut at `/website-ops/reports/latest`
-- structured feedback intake at `/website-ops/feedback`
-- open work queue at `/website-ops/queue`
+- website issue intake at `/website-ops/feedback`
+- website decisions queue at `/website-ops/queue`
 - backup browser at `/website-ops/backups/`
 
 The read-only collection and report pipeline lives in [website_ops/core.py](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/website_ops/core.py). The scheduled runner lives in [scripts/run_website_ops.py](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/scripts/run_website_ops.py) and reads [config/website_ops.json](/Users/davidnarayan/Documents/Playground/runtime/pycache/Users/davidnarayan/Documents/anata_internal/config/website_ops.json).

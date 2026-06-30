@@ -243,7 +243,7 @@ class ApUploadInboxTests(unittest.TestCase):
                 status, headers, body = call_app("/website-ops/queue", environ_overrides=auth)
                 self.assertEqual(status, "200 OK")
                 rendered = body.decode("utf-8")
-                self.assertIn("Open Work Queue", rendered)
+                self.assertIn("Website Decisions Queue", rendered)
                 self.assertIn("Fix the fulfillment hero heading", rendered)
 
                 saved_id = files[0].stem
@@ -266,6 +266,211 @@ class ApUploadInboxTests(unittest.TestCase):
                 self.assertEqual(updated["action_type"], "replace_primary_heading")
                 self.assertEqual(updated["action_value"], "Sharper Shipping Headline")
                 self.assertEqual(updated["target_post_id"], "5540")
+
+                status, headers, body = call_app("/website-ops/queue", environ_overrides=auth)
+                self.assertEqual(status, "200 OK")
+                rendered = body.decode("utf-8")
+                self.assertIn("Ready to run", rendered)
+                self.assertIn("Replace page H1", rendered)
+                self.assertIn("Sharper Shipping Headline", rendered)
+
+                status, headers, body = call_app(f"/website-ops/feedback/submissions/{saved_id}", environ_overrides=auth)
+                self.assertEqual(status, "200 OK")
+                rendered = body.decode("utf-8")
+                self.assertIn("Replace page H1", rendered)
+
+    def test_website_ops_feedback_status_rejects_unsupported_action(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ops_root = Path(tmpdir) / "website-ops"
+            inbox = ops_root / "feedback" / "inbox"
+            inbox.mkdir(parents=True)
+            record_path = inbox / "fb-1.json"
+            record_path.write_text(json.dumps({"feedback_id": "fb-1", "summary": "Review", "status": "new"}))
+            with mock.patch.dict(os.environ, {**ADMIN_ENV, "WEBSITE_OPS_DIR": str(ops_root)}, clear=False):
+                auth = admin_cookie_environ()
+                status, headers, body = call_app(
+                    "/website-ops/feedback/submissions/fb-1/status",
+                    method="POST",
+                    body=b"status=approved&action_type=unsupported_action&action_value=Nope",
+                    content_type="application/x-www-form-urlencoded",
+                    accept="application/json",
+                    environ_overrides=auth,
+                )
+            self.assertEqual(status, "400 Bad Request")
+            response = json.loads(body.decode("utf-8"))
+            self.assertEqual(response["error"], "bad-action")
+            self.assertEqual(json.loads(record_path.read_text())["status"], "new")
+
+    def test_website_ops_feedback_status_blank_action_clears_prior_action_fields(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ops_root = Path(tmpdir) / "website-ops"
+            inbox = ops_root / "feedback" / "inbox"
+            inbox.mkdir(parents=True)
+            record_path = inbox / "fb-1.json"
+            record_path.write_text(
+                json.dumps(
+                    {
+                        "feedback_id": "fb-1",
+                        "summary": "Review",
+                        "status": "approved",
+                        "action_type": "replace_primary_heading",
+                        "action_value": "Old H1",
+                        "target_post_id": "5540",
+                    }
+                )
+            )
+            with mock.patch.dict(os.environ, {**ADMIN_ENV, "WEBSITE_OPS_DIR": str(ops_root)}, clear=False):
+                auth = admin_cookie_environ()
+                status, headers, body = call_app(
+                    "/website-ops/feedback/submissions/fb-1/status",
+                    method="POST",
+                    body=b"status=in-progress&action_type=",
+                    content_type="application/x-www-form-urlencoded",
+                    accept="application/json",
+                    environ_overrides=auth,
+                )
+            self.assertEqual(status, "200 OK")
+            updated = json.loads(record_path.read_text())
+            self.assertEqual(updated["status"], "in-progress")
+            self.assertNotIn("action_type", updated)
+            self.assertNotIn("action_value", updated)
+            self.assertNotIn("target_post_id", updated)
+
+    def test_website_ops_execute_approved_route_reports_disabled_environment(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ops_root = Path(tmpdir) / "website-ops"
+            with mock.patch.dict(os.environ, {**ADMIN_ENV, "WEBSITE_OPS_DIR": str(ops_root), "WEBSITE_OPS_EXECUTE_APPROVED": ""}, clear=False):
+                auth = admin_cookie_environ()
+                with mock.patch("ap_upload_inbox.website_ops.execute_feedback_action") as execute:
+                    status, headers, body = call_app(
+                        "/website-ops/actions/execute-approved",
+                        method="POST",
+                        body=b"",
+                        accept="application/json",
+                        environ_overrides=auth,
+                    )
+            self.assertEqual(status, "409 Conflict")
+            self.assertFalse(json.loads(body.decode("utf-8"))["ok"])
+            execute.assert_not_called()
+
+    def test_website_ops_execute_approved_route_processes_safe_actions(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ops_root = Path(tmpdir) / "website-ops"
+            inbox = ops_root / "feedback" / "inbox"
+            inbox.mkdir(parents=True)
+            record_path = inbox / "fb-1.json"
+            record_path.write_text(
+                json.dumps(
+                    {
+                        "feedback_id": "fb-1",
+                        "summary": "Approved heading",
+                        "status": "approved",
+                        "action_type": "replace_primary_heading",
+                        "action_value": "New H1",
+                        "page_url": "https://example.com/services/",
+                    }
+                )
+            )
+            execution_result = {
+                "feedback_id": "fb-1",
+                "action_type": "replace_primary_heading",
+                "page_url": "https://example.com/services/",
+                "executed_at": "2026-03-26T00:00:00+00:00",
+                "verification_status": "verified",
+            }
+            with mock.patch.dict(os.environ, {**ADMIN_ENV, "WEBSITE_OPS_DIR": str(ops_root), "WEBSITE_OPS_EXECUTE_APPROVED": "true"}, clear=False):
+                auth = admin_cookie_environ()
+                with mock.patch("ap_upload_inbox.website_ops.execute_feedback_action", return_value=execution_result) as execute:
+                    status, headers, body = call_app(
+                        "/admin/api/website-ops/run",
+                        method="POST",
+                        body=b"",
+                        accept="application/json",
+                        environ_overrides=auth,
+                    )
+            self.assertEqual(status, "200 OK")
+            response = json.loads(body.decode("utf-8"))
+            self.assertTrue(response["ok"])
+            self.assertEqual(response["result"]["executed"], 1)
+            execute.assert_called_once()
+            updated = json.loads(record_path.read_text())
+            self.assertEqual(updated["status"], "done")
+            self.assertEqual(updated["execution_result"]["verification_status"], "verified")
+
+    def test_website_ops_execute_approved_route_records_partial_failures(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ops_root = Path(tmpdir) / "website-ops"
+            inbox = ops_root / "feedback" / "inbox"
+            inbox.mkdir(parents=True)
+            first_path = inbox / "fb-1.json"
+            second_path = inbox / "fb-2.json"
+            first_path.write_text(
+                json.dumps(
+                    {
+                        "feedback_id": "fb-1",
+                        "summary": "Fail heading",
+                        "status": "approved",
+                        "action_type": "replace_primary_heading",
+                        "action_value": "Broken",
+                    }
+                )
+            )
+            second_path.write_text(
+                json.dumps(
+                    {
+                        "feedback_id": "fb-2",
+                        "summary": "Pass heading",
+                        "status": "approved",
+                        "action_type": "replace_primary_heading",
+                        "action_value": "New H1",
+                    }
+                )
+            )
+
+            def execute(item):
+                if item["feedback_id"] == "fb-1":
+                    raise ap_upload_inbox.website_ops.ExecutionError("WordPress rejected the update.")
+                return {
+                    "feedback_id": item["feedback_id"],
+                    "action_type": item["action_type"],
+                    "page_url": item.get("page_url", ""),
+                    "executed_at": "2026-03-26T00:00:00+00:00",
+                    "verification_status": "verified",
+                }
+
+            with mock.patch.dict(os.environ, {**ADMIN_ENV, "WEBSITE_OPS_DIR": str(ops_root), "WEBSITE_OPS_EXECUTE_APPROVED": "true"}, clear=False):
+                auth = admin_cookie_environ()
+                with mock.patch("ap_upload_inbox.website_ops.execute_feedback_action", side_effect=execute):
+                    status, headers, body = call_app(
+                        "/admin/api/website-ops/run",
+                        method="POST",
+                        body=b"",
+                        accept="application/json",
+                        environ_overrides=auth,
+                    )
+            self.assertEqual(status, "200 OK")
+            response = json.loads(body.decode("utf-8"))
+            self.assertEqual(response["result"]["processed"], 2)
+            self.assertEqual(response["result"]["executed"], 1)
+            self.assertEqual(response["result"]["failed"], 1)
+            failed = json.loads(first_path.read_text())
+            succeeded = json.loads(second_path.read_text())
+            self.assertEqual(failed["status"], "error")
+            self.assertIn("WordPress rejected", failed["execution_error"])
+            self.assertEqual(succeeded["status"], "done")
+
+    def test_website_ops_execute_approved_api_requires_admin_session(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            ops_root = Path(tmpdir) / "website-ops"
+            with mock.patch.dict(os.environ, {**ADMIN_ENV, "WEBSITE_OPS_DIR": str(ops_root)}, clear=False):
+                status, headers, body = call_app(
+                    "/admin/api/website-ops/run",
+                    method="POST",
+                    body=b"",
+                    accept="application/json",
+                )
+            self.assertEqual(status, "401 Unauthorized")
+            self.assertEqual(json.loads(body.decode("utf-8"))["error"], "unauthorized")
 
     def test_protected_routes_return_503_when_admin_auth_is_not_configured(self):
         missing_env = {

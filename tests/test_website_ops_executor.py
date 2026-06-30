@@ -76,6 +76,19 @@ class WebsiteOpsExecutorTests(unittest.TestCase):
         self.assertEqual(result["summary"]["after_text"], "Sharper Commercial Heading")
         wp_request.assert_called_once()
 
+    def test_execute_feedback_action_rejects_invalid_registry_payload_before_wp_calls(self):
+        feedback = {
+            "feedback_id": "fb-2",
+            "status": "approved",
+            "action_type": "unsupported_action",
+            "action_value": "Nope",
+            "page_url": "https://example.com/services/shipping/",
+        }
+        with mock.patch.object(executor, "resolve_page_record") as resolve:
+            with self.assertRaises(executor.ExecutionError):
+                executor.execute_feedback_action(feedback)
+        resolve.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
