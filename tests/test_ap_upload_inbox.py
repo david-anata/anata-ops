@@ -573,6 +573,66 @@ class ApUploadInboxTests(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["snapshot"]["portalId"], "12345")
 
+    def test_sales_decks_routes_render_page_and_nav(self):
+        snapshot = {
+            "portalId": "12345",
+            "directives": {
+                "happening": ["2 open opportunities are active."],
+                "broken": ["1 deal lacks deck source data."],
+                "next": ["Start deck and audit sync once live artifact URLs exist."],
+            },
+            "objectDefinitions": {
+                "deck": {
+                    "system_of_record": "agent.anatainc.com",
+                    "share_type": "live_link",
+                    "can_belong_to_multiple_deals": True,
+                    "rules": {"one_primary_deck_per_service_line": True},
+                }
+            },
+            "recentDeals": [
+                {
+                    "name": "Acme Fulfillment Proposal",
+                    "stage": "Audit Or Deck In Progress",
+                    "company": "Acme",
+                    "contact": "Ada Lovelace",
+                    "owner": "Sales Owner",
+                    "primaryOffer": "Fulfillment",
+                    "nextStep": "Send deck",
+                    "missingFields": [],
+                    "url": "https://app.hubspot.com/contacts/123/record/0-3/deal-1",
+                },
+                {
+                    "name": "Incomplete Opportunity",
+                    "stage": "Qualified",
+                    "company": "No company",
+                    "contact": "No contact",
+                    "owner": "Unassigned",
+                    "primaryOffer": "Unclassified",
+                    "nextStep": None,
+                    "missingFields": ["company link", "contact link"],
+                },
+            ],
+        }
+        with mock.patch.dict(os.environ, ADMIN_ENV, clear=False), mock.patch.object(
+            hubspot_sales_os, "get_sales_dashboard_snapshot", return_value=snapshot
+        ):
+            auth = admin_cookie_environ()
+            for path in ("/admin/sales-decks", "/admin/sales/decks/"):
+                status, headers, body = call_app(path, environ_overrides=auth)
+                self.assertEqual(status, "200 OK")
+                rendered = body.decode("utf-8")
+                self.assertIn("Sales Decks", rendered)
+                self.assertIn('href="/admin/sales-decks"', rendered)
+                self.assertIn("Deck Status By Deal", rendered)
+                self.assertIn("Acme Fulfillment Proposal", rendered)
+                self.assertIn("Ready candidates", rendered)
+                self.assertIn("Blocked candidates", rendered)
+                self.assertIn("one primary deck per service line", rendered)
+
+            status, headers, body = call_app("/admin/sales/decks", environ_overrides=auth)
+            self.assertEqual(status, "303 See Other")
+            self.assertEqual(headers["Location"], "/admin/sales/decks/")
+
     def test_sales_writeback_json_route_returns_result(self):
         payload = {"mode": "preview", "limit": 5}
         result = {

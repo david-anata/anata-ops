@@ -2339,6 +2339,7 @@ def sales_nav() -> str:
         <p class="hint">HubSpot is the source of truth. This operator layer reads the live pipeline and applies only high-confidence changes.</p>
         <div class="ops-nav">
           <a href="/admin/sales/">Sales OS</a>
+          <a href="/admin/sales-decks">Sales Decks</a>
           <a href="/admin/sales/deals/create">Create Deal</a>
           <a href="/admin/api/sales/dashboard">Sales API</a>
           <a href="/admin/fulfillment-cs/">Fulfillment CS</a>
@@ -2388,9 +2389,9 @@ def _format_sales_relative_timestamp(value: str) -> str:
 
 def _sales_badge(status: str) -> str:
     normalized = str(status).strip().lower()
-    if normalized in {"won", "applied", "healthy", "live"}:
+    if normalized in {"won", "applied", "healthy", "live", "ready"}:
         badge_class = "badge-good"
-    elif normalized in {"lost", "critical", "blocked"}:
+    elif normalized in {"lost", "critical", "blocked", "needs next step"}:
         badge_class = "badge-warn"
     else:
         badge_class = "badge-muted"
@@ -2619,6 +2620,132 @@ def sales_dashboard_page(status_message: str, snapshot: Optional[Dict[str, Any]]
     )
 
 
+def _sales_deck_status(deal: Dict[str, Any]) -> Tuple[str, str]:
+    missing_fields = {str(item).lower() for item in deal.get("missingFields", [])}
+    blockers = {"service classification", "company link", "contact link", "amount", "owner"}
+    if missing_fields & blockers:
+        return "Blocked", "Clean the source deal before a deck should be generated."
+    next_step = str(deal.get("nextStep") or "").lower()
+    stage = str(deal.get("stage") or "").lower()
+    if any(token in next_step or token in stage for token in ("deck", "proposal", "audit", "qualified")):
+        return "Ready", "Source deal has enough structure for the deck workflow."
+    if "next step" in missing_fields:
+        return "Needs next step", "Set the next commercial action before deck work starts."
+    return "Monitor", "No deck action is indicated by the current HubSpot state."
+
+
+def _sales_deck_candidates(snapshot: Dict[str, Any]) -> List[Dict[str, Any]]:
+    candidates = []
+    for deal in snapshot.get("recentDeals", []):
+        if not isinstance(deal, dict):
+            continue
+        status, note = _sales_deck_status(deal)
+        candidate = dict(deal)
+        candidate["deckStatus"] = status
+        candidate["deckStatusNote"] = note
+        candidates.append(candidate)
+    return candidates
+
+
+def _sales_deck_candidate_markup(candidates: List[Dict[str, Any]]) -> str:
+    if not candidates:
+        return "<p class='hint'>No recent HubSpot deals were returned for deck review.</p>"
+    cards = []
+    for deal in candidates:
+        link = str(deal.get("url") or "")
+        title = html.escape(str(deal.get("name", "Unnamed deal")))
+        title_markup = f"<a href=\"{html.escape(link, quote=True)}\">{title}</a>" if link else title
+        missing_fields = deal.get("missingFields", [])
+        missing_text = ", ".join(str(field) for field in missing_fields) if missing_fields else "No critical source gaps detected."
+        cards.append(
+            f"""
+              <article class="feedback-item">
+                <p class="eyebrow">{html.escape(str(deal.get('primaryOffer', 'Unclassified')))}</p>
+                <h3>{title_markup}</h3>
+                <p>{_sales_badge(str(deal.get('deckStatus', 'Monitor')))} {html.escape(str(deal.get('stage', 'Unknown stage')))}</p>
+                <p class="muted">{html.escape(str(deal.get('company', 'No company')))} - {html.escape(str(deal.get('contact', 'No contact')))}</p>
+                <p><strong>Owner:</strong> {html.escape(str(deal.get('owner', 'Unassigned')))}</p>
+                <p><strong>Next step:</strong> {html.escape(str(deal.get('nextStep') or 'No next step'))}</p>
+                <p><strong>Deck read:</strong> {html.escape(str(deal.get('deckStatusNote', 'Review current HubSpot state.')))}</p>
+                <p><strong>Missing:</strong> {html.escape(missing_text)}</p>
+              </article>
+            """
+        )
+    return "".join(cards)
+
+
+def _sales_deck_rules_markup(snapshot: Dict[str, Any]) -> str:
+    deck_definition = snapshot.get("objectDefinitions", {}).get("deck", {})
+    rules = deck_definition.get("rules", {}) if isinstance(deck_definition, dict) else {}
+    notes = []
+    if isinstance(deck_definition, dict):
+        if deck_definition.get("system_of_record"):
+            notes.append(f"Source: {deck_definition['system_of_record']}")
+        if deck_definition.get("share_type"):
+            notes.append(f"Share type: {deck_definition['share_type']}")
+        if deck_definition.get("can_belong_to_multiple_deals"):
+            notes.append("Can belong to multiple deals")
+    if isinstance(rules, dict):
+        notes.extend(key.replace("_", " ") for key, enabled in rules.items() if enabled)
+    return "".join(f"<li class='detail-item'>{html.escape(str(note))}</li>" for note in notes) or "<li class='detail-item'>Deck object metadata is not available in the current snapshot.</li>"
+
+
+def sales_decks_page(status_message: str, snapshot: Optional[Dict[str, Any]] = None) -> str:
+    snapshot = snapshot or {}
+    candidates = _sales_deck_candidates(snapshot)
+    ready_count = sum(1 for deal in candidates if deal.get("deckStatus") == "Ready")
+    blocked_count = sum(1 for deal in candidates if deal.get("deckStatus") == "Blocked")
+    needs_next_step_count = sum(1 for deal in candidates if deal.get("deckStatus") == "Needs next step")
+    status_block = f"<p class='status-banner'>{html.escape(status_message)}</p>" if status_message else ""
+    body = f"""
+      {sales_nav()}
+      <div class="grid section-gap">
+        {render_stat_card("Deck route", "Live", "/admin/sales-decks and /admin/sales/decks/ render this surface.")}
+        {render_stat_card("Ready candidates", str(ready_count), "Recent deals with source structure ready for deck workflow.")}
+        {render_stat_card("Blocked candidates", str(blocked_count), "Deals missing source data required before deck work.")}
+        {render_stat_card("Need next step", str(needs_next_step_count), "Deals that need a commercial action before deck work.")}
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">What Is Happening</h2>
+          <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("happening", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
+        </section>
+        <section class="card">
+          <h2 class="section-title">What Is Broken</h2>
+          <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("broken", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
+        </section>
+        <section class="card">
+          <h2 class="section-title">What Should Happen Next</h2>
+          <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("next", [])) or "<p class='hint'>No next directives yet.</p>"}</div>
+        </section>
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Deck Rules</h2>
+          <p class="muted">Deck artifacts are tracked as agent-owned live links and must stay attached to clean HubSpot deal records.</p>
+          <ul class="detail-list">{_sales_deck_rules_markup(snapshot)}</ul>
+        </section>
+        <section class="card">
+          <h2 class="section-title">Generation Status</h2>
+          <p class="muted">Creation remains guarded until deck artifact persistence and deal sync are wired.</p>
+          <p><a href="/admin/sales/decks/create">Open guarded create route</a></p>
+        </section>
+      </div>
+      <div class="card section-gap">
+        <h2 class="section-title">Deck Status By Deal</h2>
+        <div class="report-list section-gap">{_sales_deck_candidate_markup(candidates)}</div>
+      </div>
+    """
+    return page_shell(
+        title="Anata Sales OS - Sales Decks",
+        eyebrow="Sales OS",
+        heading="Sales Decks",
+        intro="Operator surface for deck generation readiness, source deal blockers, and live artifact routing.",
+        status_block=status_block,
+        body=body,
+    )
+
+
 def _input_value(values: Dict[str, Any], key: str) -> str:
     return html.escape(str(values.get(key, "") or ""), quote=True)
 
@@ -2710,6 +2837,7 @@ def sales_os_guard_page(requested_path: str) -> str:
         <p class="hint">This HubSpot sales route is specified, but the handler is not wired yet.</p>
         <div class="ops-nav">
           <a href="/admin/sales/">Sales OS</a>
+          <a href="/admin/sales-decks">Sales Decks</a>
           <a href="/admin/sales/deals/create">Create Deal</a>
           <a href="{fulfillment_cs_base_path()}/">Fulfillment CS</a>
           <a href="/admin/website-ops">Website Ops</a>
@@ -2845,6 +2973,9 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
     if path == "/admin/sales":
         return redirect_response(start_response, "/admin/sales/")
 
+    if path == "/admin/sales/decks":
+        return redirect_response(start_response, "/admin/sales/decks/")
+
     if path in {"/support-agent", "/admin/support-agent", fulfillment_cs_base_path()}:
         return redirect_response(start_response, f"{fulfillment_cs_base_path()}/")
 
@@ -2858,6 +2989,18 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
             return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
         except Exception as exc:
             body = sales_dashboard_page(f"Sales dashboard failed to load: {exc}")
+            return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
+
+    if method == "GET" and path in {"/admin/sales-decks", "/admin/sales/decks/"}:
+        try:
+            snapshot = hubspot_sales_os.get_sales_dashboard_snapshot()
+            body = sales_decks_page(sales_status_message(query), snapshot=snapshot)
+            return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
+        except hubspot_sales.HubSpotSalesError as exc:
+            body = sales_decks_page(str(exc))
+            return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
+        except Exception as exc:
+            body = sales_decks_page(f"Sales decks failed to load: {exc}")
             return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
 
     if method == "GET" and path == "/admin/api/sales/dashboard":
