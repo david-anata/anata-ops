@@ -1410,7 +1410,7 @@ def build_bills_snapshot(root: Path, rules: Dict[str, Any], systems: Dict[str, A
     try:
         task_rows = ap_audit.fetch_clickup_tasks(clickup_token, clickup_list_id or None, clickup_view_id or None)
         tasks = ap_audit.normalize_tasks(task_rows, rules)
-    except Exception as exc:
+    except (Exception, SystemExit) as exc:
         return {
             "available": False,
             "message": f"ClickUp AP could not be loaded: {exc}",
@@ -1639,7 +1639,7 @@ def build_connected_systems(root: Path, rules: Dict[str, Any]) -> Dict[str, Any]
                     "message": "AP vendor sync active.",
                 }
             )
-        except Exception as exc:
+        except (Exception, SystemExit) as exc:
             clickup_status["message"] = f"ClickUp sync failed: {exc}"
     return {
         "known_vendor_keys": clickup_known_vendor_keys | qbo_known_vendor_keys,
@@ -3875,7 +3875,7 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
             try:
                 finance_snapshot = build_finance_page_snapshot(root, metadata)
                 body = upload_page(status_message, metadata, finance_snapshot)
-            except Exception as exc:
+            except (Exception, SystemExit) as exc:
                 LOGGER.exception("Finance page snapshot failed; rendering degraded finance page.")
                 fallback_snapshot = finance_snapshot_fallback(
                     metadata,

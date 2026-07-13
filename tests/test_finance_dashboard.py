@@ -187,3 +187,34 @@ class FinanceDashboardTests(unittest.TestCase):
         rendered = body.decode("utf-8")
         self.assertIn("Finance Temporarily Unavailable", rendered)
         self.assertIn("Upload Current Bank File", rendered)
+
+    def test_root_page_degrades_gracefully_when_clickup_token_is_invalid(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            ap_upload_inbox.store_upload(
+                root,
+                "bank.csv",
+                (
+                    "date,description,amount,balance\n"
+                    "2026-07-13,Opening balance,0,1000.00\n"
+                    "2026-07-13,Vendor A,-200.00,800.00\n"
+                ).encode("utf-8"),
+            )
+            env = {
+                "AP_UPLOAD_STORAGE_DIR": str(root),
+                "CLICKUP_API_TOKEN": "bad-token",
+                "CLICKUP_LIST_ID": "901104880724",
+                "CLICKUP_VIEW_ID": "",
+            }
+            with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(
+                ap_upload_inbox.ap_audit,
+                "fetch_clickup_tasks",
+                side_effect=SystemExit("API request failed (401) for ClickUp: Token invalid"),
+            ):
+                status, headers, body = call_app("/", local_bypass=True)
+
+        self.assertEqual(status, "200 OK")
+        rendered = body.decode("utf-8")
+        self.assertIn("Cash And Bills", rendered)
+        self.assertIn("Cash In Bank", rendered)
+        self.assertIn("ClickUp AP could not be loaded", rendered)
