@@ -168,3 +168,22 @@ class FinanceDashboardTests(unittest.TestCase):
         self.assertIn("Cash And Bills", rendered)
         self.assertIn("Finance data is temporarily unavailable while source connections recover.", rendered)
         self.assertIn("Cash Unavailable", rendered)
+
+    def test_root_page_falls_back_to_bare_finance_error_page_when_dashboard_render_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"AP_UPLOAD_STORAGE_DIR": str(Path(tmpdir))}
+            with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(
+                ap_upload_inbox,
+                "build_finance_page_snapshot",
+                side_effect=RuntimeError("finance page exploded"),
+            ), mock.patch.object(
+                ap_upload_inbox,
+                "upload_page",
+                side_effect=RuntimeError("dashboard render exploded"),
+            ):
+                status, headers, body = call_app("/", local_bypass=True)
+
+        self.assertEqual(status, "200 OK")
+        rendered = body.decode("utf-8")
+        self.assertIn("Finance Temporarily Unavailable", rendered)
+        self.assertIn("Upload Current Bank File", rendered)

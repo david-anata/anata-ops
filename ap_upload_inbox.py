@@ -496,6 +496,56 @@ def upload_page(status_message: str, metadata: Dict[str, Any], finance_snapshot:
     )
 
 
+def finance_render_failure_page(status_message: str, metadata: Dict[str, Any], reason: str) -> str:
+    latest_name = html.escape(metadata.get("original_filename", "No file uploaded"))
+    latest_uploaded_at = html.escape(format_timestamp(metadata.get("uploaded_at", "")))
+    latest_size = metadata.get("byte_size", 0)
+    status_block = f"<p class='status-banner'>{html.escape(status_message)}</p>" if status_message else ""
+    body = f"""<div class="toolbar">
+        <p class="hint">Finance data is temporarily unavailable. The upload inbox is still available.</p>
+        <div class="ops-nav">
+          <a href="/admin/sales/">Sales OS</a>
+          <a href="/website-ops/">Website Ops</a>
+          <a href="/support-agent/">Support Agent</a>
+        </div>
+        <form action="/logout" method="post">
+          <button class="ghost" type="submit">Log Out</button>
+        </form>
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Finance Temporarily Unavailable</h2>
+          <p class="hint">{html.escape(reason)}</p>
+        </section>
+      </div>
+      <div class="grid section-gap">
+        <section class="card card-form">
+          <h2 class="section-title">Upload Current Bank File</h2>
+          <p class="hint">Use the newest bank export as the cash source of truth for this page.</p>
+          <form action="/upload" method="post" enctype="multipart/form-data">
+            <label for="transaction_file">Bank transactions CSV</label>
+            <input id="transaction_file" name="transaction_file" type="file" accept=".csv,text/csv">
+            <button type="submit">Upload Latest CSV</button>
+          </form>
+        </section>
+        <section class="card">
+          <h2 class="section-title">Current Bank File</h2>
+          <div class="metric"><strong>Filename</strong>{latest_name}</div>
+          <div class="metric"><strong>Uploaded At</strong>{latest_uploaded_at}</div>
+          <div class="metric"><strong>Size</strong>{latest_size:,} bytes</div>
+          <p><a href="/latest.csv">Download current transactions CSV</a></p>
+        </section>
+      </div>"""
+    return page_shell(
+        title="Anata Finance",
+        eyebrow="Finance",
+        heading="Cash And Bills",
+        intro="Current cash, upcoming AP, recent posted outflows, and a conservative balance forecast from the sources we can actually trust.",
+        status_block=status_block,
+        body=body,
+    )
+
+
 def slugify(value: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "-", value.strip().lower())
     return slug.strip("-") or "item"
@@ -3824,13 +3874,22 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
         if request_is_admin_authenticated(environ):
             try:
                 finance_snapshot = build_finance_page_snapshot(root, metadata)
+                body = upload_page(status_message, metadata, finance_snapshot)
             except Exception as exc:
                 LOGGER.exception("Finance page snapshot failed; rendering degraded finance page.")
-                finance_snapshot = finance_snapshot_fallback(
+                fallback_snapshot = finance_snapshot_fallback(
                     metadata,
                     "Finance data is temporarily unavailable while source connections recover.",
                 )
-            body = upload_page(status_message, metadata, finance_snapshot)
+                try:
+                    body = upload_page(status_message, metadata, fallback_snapshot)
+                except Exception:
+                    LOGGER.exception("Finance fallback render failed; rendering bare finance error page.")
+                    body = finance_render_failure_page(
+                        status_message,
+                        metadata,
+                        "Finance data is temporarily unavailable while source connections recover.",
+                    )
         else:
             body = login_page(status_message)
         return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")
