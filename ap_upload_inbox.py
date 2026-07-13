@@ -8,6 +8,7 @@ import hashlib
 import hmac
 import html
 import json
+import logging
 import mimetypes
 import os
 import re
@@ -48,6 +49,7 @@ WEBSITE_OPS_FEEDBACK_INBOX_DIRNAME = "inbox"
 SUPPORT_AGENT_DIRNAME = "support-agent"
 ADMIN_DIRNAME = "admin"
 FULFILLMENT_CS_DIRNAME = "fulfillment-cs"
+LOGGER = logging.getLogger(__name__)
 
 
 def storage_dir() -> Path:
@@ -173,7 +175,12 @@ def support_agent_legacy_base_path() -> str:
 
 
 def runtime_rules(root: Path) -> Dict[str, Any]:
-    return qbo_client.enrich_rules_with_qbo(ap_audit.load_rules(None), configured_path=qbo_token_store_path(root))
+    base_rules = ap_audit.load_rules(None)
+    try:
+        return qbo_client.enrich_rules_with_qbo(base_rules, configured_path=qbo_token_store_path(root))
+    except Exception as exc:
+        LOGGER.warning("QBO enrichment failed for runtime rules; falling back to local rules only: %s", exc)
+        return base_rules
 
 
 def sanitize_filename(filename: str) -> str:

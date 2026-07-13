@@ -42,6 +42,21 @@ def call_app(path, *, environ_overrides=None, local_bypass=False):
 
 
 class FinanceDashboardTests(unittest.TestCase):
+    def test_root_page_still_renders_when_qbo_rule_enrichment_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"AP_UPLOAD_STORAGE_DIR": str(Path(tmpdir))}
+            with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(
+                ap_upload_inbox.qbo_client,
+                "enrich_rules_with_qbo",
+                side_effect=RuntimeError("QBO token refresh failed"),
+            ):
+                status, headers, body = call_app("/", local_bypass=True)
+
+        self.assertEqual(status, "200 OK")
+        rendered = body.decode("utf-8")
+        self.assertIn("Cash And Bills", rendered)
+        self.assertIn("Cash Unavailable", rendered)
+
     def test_build_bank_snapshot_uses_latest_balance_on_same_day(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -137,4 +152,3 @@ class FinanceDashboardTests(unittest.TestCase):
         self.assertIn("Trust Panel", rendered)
         self.assertIn("$12,500.00", rendered)
         self.assertIn("Rent", rendered)
-
