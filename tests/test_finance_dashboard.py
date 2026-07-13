@@ -145,13 +145,18 @@ class FinanceDashboardTests(unittest.TestCase):
         self.assertEqual(status, "200 OK")
         rendered = body.decode("utf-8")
         self.assertIn("Cash And Bills", rendered)
-        self.assertIn("Cash In Bank", rendered)
-        self.assertIn("Next Bills Due", rendered)
-        self.assertIn("Projected Cash Balance", rendered)
-        self.assertIn("Recent Posted Outflows", rendered)
-        self.assertIn("Trust Panel", rendered)
+        self.assertIn("Happening", rendered)
+        self.assertIn("Broken", rendered)
+        self.assertIn("Next", rendered)
+        self.assertIn("Payables Action Queue", rendered)
+        self.assertIn("Why This Number", rendered)
+        self.assertIn("Show forecast details", rendered)
+        self.assertIn("Show recent posted outflows", rendered)
+        self.assertIn("Utilities", rendered)
+        self.assertIn("Safe To Spend", rendered)
         self.assertIn("$12,500.00", rendered)
         self.assertIn("Rent", rendered)
+        self.assertIn("Review plan", rendered)
 
     def test_root_page_degrades_gracefully_when_finance_snapshot_fails(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -218,3 +223,4 @@ class FinanceDashboardTests(unittest.TestCase):
         self.assertIn("Cash And Bills", rendered)
         self.assertIn("Cash In Bank", rendered)
         self.assertIn("ClickUp AP could not be loaded", rendered)
+        self.assertIn("Payables Action Queue", rendered)

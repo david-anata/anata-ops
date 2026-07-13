@@ -622,6 +622,68 @@ def render_forecast_chart(forecast_snapshot: Dict[str, Any]) -> str:
     """
 
 
+def parse_iso_datetime(value: str) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def is_chunk_payable_vendor(vendor: str) -> bool:
+    return "rent" in ap_audit.normalize_key(vendor)
+
+
+def finance_action_queue_items(bills_snapshot: Dict[str, Any], *, window_days: int = 14) -> List[Dict[str, Any]]:
+    queue: List[Dict[str, Any]] = []
+    for item in bills_snapshot.get("items", []):
+        days_until_due = int(item.get("days_until_due", 999))
+        if days_until_due > window_days:
+            continue
+        vendor = str(item.get("vendor", "") or "")
+        chunk_payable = is_chunk_payable_vendor(vendor)
+        if chunk_payable:
+            queue_state = "Chunk-payable"
+            action = "Review plan"
+        elif days_until_due < 0:
+            queue_state = "Overdue"
+            action = "Review overdue"
+        elif days_until_due <= 7:
+            queue_state = "Due this week"
+            action = "Pay or schedule"
+        else:
+            queue_state = "Due next week"
+            action = "Plan payment"
+        queue.append(
+            {
+                **item,
+                "queue_state": queue_state,
+                "action": action,
+                "chunk_payable": chunk_payable,
+            }
+        )
+    queue.sort(
+        key=lambda item: (
+            0 if item["queue_state"] == "Overdue" else 1,
+            0 if item["chunk_payable"] else 1,
+            item["due_date"],
+            -float(item["remaining_balance"]),
+        )
+    )
+    return queue
+
+
+def render_finance_control_card(title: str, body_lines: List[str]) -> str:
+    lines_html = "".join(f"<li>{html.escape(line)}</li>" for line in body_lines if line)
+    return f"""
+      <section class="card finance-control-card">
+        <h2 class="section-title">{html.escape(title)}</h2>
+        <ul class="detail-list finance-control-list">{lines_html}</ul>
+      </section>
+    """
+
+
 def render_finance_dashboard_html(finance_snapshot: Dict[str, Any], metadata: Dict[str, Any]) -> str:
     bank = finance_snapshot.get("bank", {})
     bills = finance_snapshot.get("bills", {})
@@ -637,21 +699,25 @@ def render_finance_dashboard_html(finance_snapshot: Dict[str, Any], metadata: Di
         if bills.get("available")
         else f"<span class='badge badge-critical'>Bills Unavailable</span>"
     )
-    uploaded_at = html.escape(format_timestamp(bank.get("uploaded_at", metadata.get("uploaded_at", ""))))
+    uploaded_at_raw = str(bank.get("uploaded_at", metadata.get("uploaded_at", "")) or "")
+    uploaded_at = html.escape(format_timestamp(uploaded_at_raw))
+    uploaded_dt = parse_iso_datetime(uploaded_at_raw)
 
-    bills_rows = ""
-    for item in bills.get("items", [])[:8]:
-        bills_rows += (
+    queue_items = finance_action_queue_items(bills, window_days=14)
+    queue_rows = ""
+    for item in queue_items[:10]:
+        queue_rows += (
             "<tr>"
             f"<td><span class='badge {bill_badge_class(str(item['level']))}'>{html.escape(str(item['level']).title())}</span></td>"
             f"<td>{html.escape(str(item['vendor']))}</td>"
             f"<td>{format_money(float(item['remaining_balance']))}</td>"
             f"<td>{html.escape(item['due_date'].isoformat())}</td>"
-            f"<td>{html.escape(str(item['ap_state']))}</td>"
+            f"<td>{html.escape(str(item['queue_state']))}</td>"
+            f"<td>{html.escape(str(item['action']))}</td>"
             "</tr>"
         )
-    if not bills_rows:
-        bills_rows = "<tr><td colspan='5' class='empty-cell'>No upcoming AP obligations are available.</td></tr>"
+    if not queue_rows:
+        queue_rows = "<tr><td colspan='6' class='empty-cell'>No bills require action in the next 14 days.</td></tr>"
 
     expense_rows = ""
     for row in bank.get("recent_outflows", [])[:8]:
@@ -666,24 +732,54 @@ def render_finance_dashboard_html(finance_snapshot: Dict[str, Any], metadata: Di
     if not expense_rows:
         expense_rows = "<tr><td colspan='4' class='empty-cell'>No posted outflows are available from the latest bank file.</td></tr>"
 
-    current_cash_value = (
-        format_money(float(bank["current_cash"]))
-        if bank.get("current_cash") is not None
-        else "Unavailable"
-    )
-    due_14_value = format_money(float(bills.get("due_in_14_days", 0.0))) if bills.get("available") else "Unavailable"
+    current_cash = float(bank["current_cash"]) if bank.get("current_cash") is not None else None
+    due_14_amount = float(bills.get("due_in_14_days", 0.0)) if bills.get("available") else None
+    safe_to_spend = round(current_cash - due_14_amount, 2) if current_cash is not None and due_14_amount is not None else None
+    safe_to_spend_value = format_signed_money(safe_to_spend) if safe_to_spend is not None else "Unavailable"
+    current_cash_value = format_money(current_cash) if current_cash is not None else "Unavailable"
+    due_14_value = format_money(due_14_amount) if due_14_amount is not None else "Unavailable"
     overdue_value = format_money(float(bills.get("overdue_total", 0.0))) if bills.get("available") else "Unavailable"
-    low_point = forecast.get("low_point", {})
-    low_point_value = (
-        f"{format_money(float(low_point['balance']))} on {html.escape(low_point['date'].isoformat())}"
-        if forecast.get("available") and low_point
-        else "Unavailable"
-    )
+
+    overdue_count = int(bills.get("overdue_count", 0) or 0)
+    chunk_payable_count = sum(1 for item in queue_items if item.get("chunk_payable"))
+    stale_bank = False
+    if uploaded_dt is not None:
+        stale_bank = (datetime.now(timezone.utc) - uploaded_dt.astimezone(timezone.utc)) > timedelta(days=7)
+
+    happening_lines = [
+        f"Cash in bank: {current_cash_value}",
+        f"Due in 14 days: {due_14_value}",
+        f"Safe to spend: {safe_to_spend_value}",
+        f"Bank file: {format_timestamp(uploaded_at_raw)}",
+    ]
+    broken_lines: List[str] = []
+    if overdue_count:
+        broken_lines.append(f"Overdue AP: {overdue_value} across {overdue_count} items.")
+    if chunk_payable_count:
+        broken_lines.append(f"{chunk_payable_count} chunk-payable bills need manual review.")
+    if stale_bank:
+        broken_lines.append("Bank upload is stale, so cash may no longer match reality.")
+    if not bills.get("available"):
+        broken_lines.append(str(bills.get("message") or "Bills source is unavailable."))
+    if not broken_lines:
+        broken_lines.append("No overdue, stale, or unavailable finance blockers are active.")
+
+    next_lines: List[str] = []
+    if overdue_count:
+        next_lines.append("Review the overdue queue first.")
+    if chunk_payable_count:
+        next_lines.append("Start with rent and other chunk-payable obligations.")
+    if stale_bank:
+        next_lines.append("Upload the current bank CSV before trusting the safe-to-spend number.")
+    if not bills.get("available"):
+        next_lines.append("Reconnect the bills source before using this page for payment planning.")
+    if not next_lines:
+        next_lines.append("No immediate finance action is required today.")
 
     trust_items = [
-        ("Cash source", "Latest uploaded bank CSV `Balance` field"),
-        ("Bills source", "ClickUp AP remaining balances and due dates"),
-        ("Forecast mode", "Conservative: current cash minus scheduled AP only"),
+        ("Safe to spend", "Cash minus all obligations due in the next 14 days."),
+        ("Posted payments", "Bank CSV wins once money has already cleared the bank."),
+        ("Bills source", "ClickUp AP remains the planned-obligations layer."),
         ("Bank freshness", uploaded_at or "No upload yet"),
         ("AP freshness", "Live on page load" if bills.get("available") else bills.get("message", "Unavailable")),
     ]
@@ -694,63 +790,99 @@ def render_finance_dashboard_html(finance_snapshot: Dict[str, Any], metadata: Di
 
     bank_message = f"<p class='hint'>{html.escape(bank.get('message', ''))}</p>" if bank.get("message") else ""
     bills_message = f"<p class='hint'>{html.escape(bills.get('message', ''))}</p>" if bills.get("message") else ""
+    compressed_upload = f"""
+      <section class="card finance-utility-card">
+        <div class="finance-utility-head">
+          <div>
+            <h2 class="section-title">Utilities</h2>
+            <p class="hint">Keep the bank CSV here as the fallback cash source when live bank input is unavailable.</p>
+          </div>
+          <div class="finance-utility-meta">
+            <span><strong>Current file</strong> {html.escape(metadata.get("original_filename", "No file uploaded"))}</span>
+            <span><strong>Uploaded</strong> {uploaded_at}</span>
+          </div>
+        </div>
+        <form class="finance-inline-upload" action="/upload" method="post" enctype="multipart/form-data">
+          <label for="transaction_file">Bank transactions CSV</label>
+          <input id="transaction_file" name="transaction_file" type="file" accept=".csv,text/csv">
+          <button type="submit">Upload Current Bank CSV</button>
+          <a class="button-link" href="/latest.csv">Download current CSV</a>
+        </form>
+      </section>
+    """
     return f"""
       <div class="finance-status-row">
         {bank_status}
         {bills_status}
         <span class="finance-source-note">Bank file synced {uploaded_at or 'not yet uploaded'}</span>
       </div>
+      <div class="grid finance-control-grid section-gap">
+        {render_finance_control_card("Happening", happening_lines)}
+        {render_finance_control_card("Broken", broken_lines)}
+        {render_finance_control_card("Next", next_lines)}
+      </div>
       <div class="finance-metric-grid section-gap">
         <section class="card finance-metric-card">
           <span>Cash In Bank</span>
           <strong>{current_cash_value}</strong>
-          <small>From the latest bank balance row.</small>
+          <small>Latest posted balance from the uploaded bank file.</small>
         </section>
         <section class="card finance-metric-card">
-          <span>Bills Due 14d</span>
+          <span>Due In 14 Days</span>
           <strong>{due_14_value}</strong>
-          <small>{len([item for item in bills.get('items', []) if 0 <= item.get('days_until_due', 999) <= 14])} obligations</small>
+          <small>{len([item for item in queue_items if 0 <= item.get('days_until_due', 999) <= 14])} upcoming obligations.</small>
         </section>
         <section class="card finance-metric-card">
           <span>Overdue AP</span>
           <strong>{overdue_value}</strong>
-          <small>{bills.get('overdue_count', 0)} items</small>
+          <small>{overdue_count} overdue items.</small>
         </section>
         <section class="card finance-metric-card">
-          <span>Low Point 30d</span>
-          <strong>{low_point_value}</strong>
-          <small>Conservative cash forecast.</small>
+          <span>Safe To Spend</span>
+          <strong>{safe_to_spend_value}</strong>
+          <small>Cash minus all obligations due in the next 14 days.</small>
         </section>
       </div>
-      <div class="grid section-gap">
+      <div class="grid section-gap finance-main-grid">
         <section class="card">
-          <h2 class="section-title">Next Bills Due</h2>
+          <h2 class="section-title">Payables Action Queue</h2>
+          <p class="hint">This queue only shows overdue bills and obligations due in the next 14 days. Chunk-payable bills stay visible at full balance, but flagged for review.</p>
           {bills_message}
           <div class="table-wrap finance-table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Level</th>
+                  <th>Priority</th>
                   <th>Vendor</th>
                   <th>Remaining</th>
                   <th>Due</th>
-                  <th>State</th>
+                  <th>Status</th>
+                  <th>Action</th>
                 </tr>
               </thead>
               <tbody>
-                {bills_rows}
+                {queue_rows}
               </tbody>
             </table>
           </div>
         </section>
         <section class="card">
-          <h2 class="section-title">Projected Cash Balance</h2>
-          <p class="hint">Starts from current bank cash and subtracts scheduled AP. No inflows are assumed until a trusted AR source exists.</p>
-          {render_forecast_chart(forecast)}
+          <h2 class="section-title">Why This Number</h2>
+          <p class="hint">The safe-to-spend number should be trusted only when the bank file is current and the payables queue is free of hidden conflicts.</p>
+          {trust_html}
+          <details class="finance-toggle">
+            <summary>Show forecast details</summary>
+            <div class="finance-toggle-body">
+              <p class="hint">Forecast detail stays secondary. The main operator number is safe to spend over the next 14 days.</p>
+              {render_forecast_chart(forecast)}
+            </div>
+          </details>
         </section>
       </div>
-      <div class="grid section-gap">
-        <section class="card">
+      {compressed_upload}
+      <details class="finance-toggle section-gap">
+        <summary>Show recent posted outflows</summary>
+        <div class="card finance-toggle-card">
           <h2 class="section-title">Recent Posted Outflows</h2>
           {bank_message}
           <div class="table-wrap finance-table-wrap">
@@ -768,13 +900,8 @@ def render_finance_dashboard_html(finance_snapshot: Dict[str, Any], metadata: Di
               </tbody>
             </table>
           </div>
-        </section>
-        <section class="card">
-          <h2 class="section-title">Trust Panel</h2>
-          <p class="hint">This page only shows values tied to named sources. If a source is missing, the value stays unavailable.</p>
-          {trust_html}
-        </section>
-      </div>
+        </div>
+      </details>
     """
 
 
