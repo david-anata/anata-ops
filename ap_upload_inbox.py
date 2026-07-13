@@ -442,13 +442,14 @@ def login_page(status_message: str) -> str:
     )
 
 
-def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: str = "") -> str:
+def upload_page(status_message: str, metadata: Dict[str, Any], finance_snapshot: Optional[Dict[str, Any]] = None) -> str:
     latest_name = html.escape(metadata.get("original_filename", "No file uploaded"))
     latest_uploaded_at = html.escape(format_timestamp(metadata.get("uploaded_at", "")))
     latest_size = metadata.get("byte_size", 0)
     status_block = f"<p class='status-banner'>{html.escape(status_message)}</p>" if status_message else ""
+    dashboard_html = render_finance_dashboard_html(finance_snapshot or {}, metadata)
     body = f"""<div class="toolbar">
-        <p class="hint">Upload the newest bank-export CSV. The daily and weekly AP audits always fetch the current file from this inbox.</p>
+        <p class="hint">One page for current cash, upcoming bills, posted expenses, and a conservative cash forecast.</p>
         <div class="ops-nav">
           <a href="/admin/sales/">Sales OS</a>
           <a href="/website-ops/">Website Ops</a>
@@ -458,30 +459,31 @@ def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: st
           <button class="ghost" type="submit">Log Out</button>
         </form>
       </div>
-      <div class="grid">
+      {dashboard_html}
+      <div class="grid section-gap">
         <section class="card card-form">
-          <h2 class="section-title">Upload Current File</h2>
+          <h2 class="section-title">Upload Current Bank File</h2>
+          <p class="hint">Use the newest bank export as the cash source of truth for this page.</p>
           <form action="/upload" method="post" enctype="multipart/form-data">
-            <label for="transaction_file">Transactions CSV</label>
+            <label for="transaction_file">Bank transactions CSV</label>
             <input id="transaction_file" name="transaction_file" type="file" accept=".csv,text/csv">
             <button type="submit">Upload Latest CSV</button>
           </form>
         </section>
         <section class="card">
-          <h2 class="section-title">Current File</h2>
+          <h2 class="section-title">Current Bank File</h2>
           <div class="metric"><strong>Filename</strong>{latest_name}</div>
           <div class="metric"><strong>Uploaded At</strong>{latest_uploaded_at}</div>
           <div class="metric"><strong>Size</strong>{latest_size:,} bytes</div>
           <p><a href="/latest.csv">Download current transactions CSV</a></p>
-          <p class="hint">Cron jobs read <code>/latest.csv</code> using the machine token, but admins can also download it directly while logged in.</p>
+          <p class="hint">The page uses the latest uploaded file for cash and recent posted expense context.</p>
         </section>
-      </div>
-      {analysis_html}"""
+      </div>"""
     return page_shell(
-        title="Anata AP Upload Inbox",
-        eyebrow="Anata AP Intake",
-        heading="Weekly Bank Export Inbox",
-        intro="Submit the latest bank transactions CSV here instead of relying on a local file path.",
+        title="Anata Finance",
+        eyebrow="Finance",
+        heading="Cash And Bills",
+        intro="Current cash, upcoming AP, recent posted outflows, and a conservative balance forecast from the sources we can actually trust.",
         status_block=status_block,
         body=body,
     )
@@ -490,6 +492,233 @@ def upload_page(status_message: str, metadata: Dict[str, Any], analysis_html: st
 def slugify(value: str) -> str:
     slug = re.sub(r"[^A-Za-z0-9]+", "-", value.strip().lower())
     return slug.strip("-") or "item"
+
+
+def bill_badge_class(level: str) -> str:
+    if level == "OVERDUE":
+        return "badge-critical"
+    if level == "CRITICAL":
+        return "badge-critical"
+    if level == "HIGH":
+        return "badge-warn"
+    if level == "MEDIUM":
+        return "badge-muted"
+    return "badge-good"
+
+
+def render_forecast_chart(forecast_snapshot: Dict[str, Any]) -> str:
+    if not forecast_snapshot.get("available"):
+        return f"<p class='hint'>{html.escape(forecast_snapshot.get('message', 'Forecast unavailable.'))}</p>"
+
+    points = forecast_snapshot.get("points", [])
+    if not points:
+        return "<p class='hint'>No scheduled bill events are available for the forecast.</p>"
+
+    width = 560
+    height = 220
+    padding = 24
+    balances = [float(point["balance"]) for point in points]
+    min_balance = min(balances)
+    max_balance = max(balances)
+    if abs(max_balance - min_balance) < 1:
+        max_balance += 1
+        min_balance -= 1
+
+    def point_x(index: int) -> float:
+        if len(points) == 1:
+            return width / 2
+        usable_width = width - (padding * 2)
+        return padding + (usable_width * index / (len(points) - 1))
+
+    def point_y(balance: float) -> float:
+        usable_height = height - (padding * 2)
+        ratio = (balance - min_balance) / (max_balance - min_balance)
+        return height - padding - (usable_height * ratio)
+
+    path = " ".join(
+        f"{'M' if index == 0 else 'L'} {point_x(index):.1f} {point_y(float(point['balance'])):.1f}"
+        for index, point in enumerate(points)
+    )
+    circles = "".join(
+        f"<circle cx='{point_x(index):.1f}' cy='{point_y(float(point['balance'])):.1f}' r='4'></circle>"
+        for index, point in enumerate(points)
+    )
+    labels = "".join(
+        f"<div><span>{html.escape(point['date'].isoformat())}</span><strong>{format_money(float(point['balance']))}</strong></div>"
+        for point in (points[0], points[-1])
+    )
+    low_point = forecast_snapshot.get("low_point", {})
+    low_point_text = ""
+    if low_point:
+        low_point_text = f"<p class='hint'>Low point in the next 30 days: <strong>{format_money(float(low_point['balance']))}</strong> on {html.escape(low_point['date'].isoformat())}.</p>"
+    return f"""
+      <div class="forecast-wrap">
+        <svg viewBox="0 0 {width} {height}" class="forecast-chart" role="img" aria-label="Projected cash balance">
+          <path class="forecast-grid-line" d="M {padding} {height - padding} L {width - padding} {height - padding}"></path>
+          <path class="forecast-grid-line" d="M {padding} {padding} L {padding} {height - padding}"></path>
+          <path class="forecast-line" d="{path}"></path>
+          {circles}
+        </svg>
+        <div class="forecast-labels">{labels}</div>
+        {low_point_text}
+      </div>
+    """
+
+
+def render_finance_dashboard_html(finance_snapshot: Dict[str, Any], metadata: Dict[str, Any]) -> str:
+    bank = finance_snapshot.get("bank", {})
+    bills = finance_snapshot.get("bills", {})
+    forecast = finance_snapshot.get("forecast", {})
+
+    bank_status = (
+        f"<span class='badge badge-good'>Bank Loaded</span>"
+        if bank.get("available")
+        else f"<span class='badge badge-critical'>Cash Unavailable</span>"
+    )
+    bills_status = (
+        f"<span class='badge badge-good'>Bills Loaded</span>"
+        if bills.get("available")
+        else f"<span class='badge badge-critical'>Bills Unavailable</span>"
+    )
+    uploaded_at = html.escape(format_timestamp(bank.get("uploaded_at", metadata.get("uploaded_at", ""))))
+
+    bills_rows = ""
+    for item in bills.get("items", [])[:8]:
+        bills_rows += (
+            "<tr>"
+            f"<td><span class='badge {bill_badge_class(str(item['level']))}'>{html.escape(str(item['level']).title())}</span></td>"
+            f"<td>{html.escape(str(item['vendor']))}</td>"
+            f"<td>{format_money(float(item['remaining_balance']))}</td>"
+            f"<td>{html.escape(item['due_date'].isoformat())}</td>"
+            f"<td>{html.escape(str(item['ap_state']))}</td>"
+            "</tr>"
+        )
+    if not bills_rows:
+        bills_rows = "<tr><td colspan='5' class='empty-cell'>No upcoming AP obligations are available.</td></tr>"
+
+    expense_rows = ""
+    for row in bank.get("recent_outflows", [])[:8]:
+        expense_rows += (
+            "<tr>"
+            f"<td>{html.escape(row['date'].isoformat() if row.get('date') else '')}</td>"
+            f"<td>{html.escape(str(row.get('description', '')))}</td>"
+            f"<td>{format_signed_money(float(row['amount'])) if row.get('amount') is not None else ''}</td>"
+            f"<td>{format_money(float(row['balance'])) if row.get('balance') is not None else 'Unavailable'}</td>"
+            "</tr>"
+        )
+    if not expense_rows:
+        expense_rows = "<tr><td colspan='4' class='empty-cell'>No posted outflows are available from the latest bank file.</td></tr>"
+
+    current_cash_value = (
+        format_money(float(bank["current_cash"]))
+        if bank.get("current_cash") is not None
+        else "Unavailable"
+    )
+    due_14_value = format_money(float(bills.get("due_in_14_days", 0.0))) if bills.get("available") else "Unavailable"
+    overdue_value = format_money(float(bills.get("overdue_total", 0.0))) if bills.get("available") else "Unavailable"
+    low_point = forecast.get("low_point", {})
+    low_point_value = (
+        f"{format_money(float(low_point['balance']))} on {html.escape(low_point['date'].isoformat())}"
+        if forecast.get("available") and low_point
+        else "Unavailable"
+    )
+
+    trust_items = [
+        ("Cash source", "Latest uploaded bank CSV `Balance` field"),
+        ("Bills source", "ClickUp AP remaining balances and due dates"),
+        ("Forecast mode", "Conservative: current cash minus scheduled AP only"),
+        ("Bank freshness", uploaded_at or "No upload yet"),
+        ("AP freshness", "Live on page load" if bills.get("available") else bills.get("message", "Unavailable")),
+    ]
+    trust_html = "".join(
+        f"<div class='metric'><strong>{html.escape(label)}</strong>{html.escape(value)}</div>"
+        for label, value in trust_items
+    )
+
+    bank_message = f"<p class='hint'>{html.escape(bank.get('message', ''))}</p>" if bank.get("message") else ""
+    bills_message = f"<p class='hint'>{html.escape(bills.get('message', ''))}</p>" if bills.get("message") else ""
+    return f"""
+      <div class="finance-status-row">
+        {bank_status}
+        {bills_status}
+        <span class="finance-source-note">Bank file synced {uploaded_at or 'not yet uploaded'}</span>
+      </div>
+      <div class="finance-metric-grid section-gap">
+        <section class="card finance-metric-card">
+          <span>Cash In Bank</span>
+          <strong>{current_cash_value}</strong>
+          <small>From the latest bank balance row.</small>
+        </section>
+        <section class="card finance-metric-card">
+          <span>Bills Due 14d</span>
+          <strong>{due_14_value}</strong>
+          <small>{len([item for item in bills.get('items', []) if 0 <= item.get('days_until_due', 999) <= 14])} obligations</small>
+        </section>
+        <section class="card finance-metric-card">
+          <span>Overdue AP</span>
+          <strong>{overdue_value}</strong>
+          <small>{bills.get('overdue_count', 0)} items</small>
+        </section>
+        <section class="card finance-metric-card">
+          <span>Low Point 30d</span>
+          <strong>{low_point_value}</strong>
+          <small>Conservative cash forecast.</small>
+        </section>
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Next Bills Due</h2>
+          {bills_message}
+          <div class="table-wrap finance-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Level</th>
+                  <th>Vendor</th>
+                  <th>Remaining</th>
+                  <th>Due</th>
+                  <th>State</th>
+                </tr>
+              </thead>
+              <tbody>
+                {bills_rows}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="card">
+          <h2 class="section-title">Projected Cash Balance</h2>
+          <p class="hint">Starts from current bank cash and subtracts scheduled AP. No inflows are assumed until a trusted AR source exists.</p>
+          {render_forecast_chart(forecast)}
+        </section>
+      </div>
+      <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Recent Posted Outflows</h2>
+          {bank_message}
+          <div class="table-wrap finance-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Balance After</th>
+                </tr>
+              </thead>
+              <tbody>
+                {expense_rows}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section class="card">
+          <h2 class="section-title">Trust Panel</h2>
+          <p class="hint">This page only shows values tied to named sources. If a source is missing, the value stays unavailable.</p>
+          {trust_html}
+        </section>
+      </div>
+    """
 
 
 def extract_report_metadata(text: str, path: Path) -> Dict[str, str]:
@@ -985,6 +1214,257 @@ def website_ops_status_message(query: Dict[str, str]) -> str:
 
 def format_money(amount: float) -> str:
     return f"${amount:,.2f}"
+
+
+def format_signed_money(amount: float) -> str:
+    prefix = "-" if amount < 0 else ""
+    return f"{prefix}${abs(amount):,.2f}"
+
+
+def parse_signed_money(value: Any) -> Optional[float]:
+    if value in (None, ""):
+        return None
+    if isinstance(value, (int, float)):
+        return round(float(value), 2)
+    text = str(value).strip()
+    if not text:
+        return None
+    negative = text.startswith("(") and text.endswith(")")
+    cleaned = re.sub(r"[^0-9.\-]", "", text)
+    if cleaned in ("", "-", "."):
+        return None
+    amount = float(cleaned)
+    if negative:
+        amount = -abs(amount)
+    return round(amount, 2)
+
+
+def latest_raw_transaction_rows(path: Path) -> List[Dict[str, Any]]:
+    if not path.exists():
+        return []
+    return ap_audit.load_rows(str(path))
+
+
+def normalize_bank_activity_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    normalized: List[Dict[str, Any]] = []
+    for index, row in enumerate(rows):
+        amount = parse_signed_money(
+            ap_audit.pick_value(
+                row,
+                ["amount", "debit", "withdrawal_amount", "value"],
+            )
+        )
+        balance = parse_signed_money(
+            ap_audit.pick_value(
+                row,
+                ["balance", "running balance", "available balance"],
+            )
+        )
+        normalized.append(
+            {
+                "row_index": index,
+                "date": ap_audit.parse_date(
+                    ap_audit.pick_value(
+                        row,
+                        ["date", "transaction_date", "posted_date", "posting date", "effective_date", "effective date"],
+                    )
+                ),
+                "reference": str(
+                    ap_audit.pick_value(
+                        row,
+                        ["reference", "reference number", "transaction_reference", "transaction id", "id", "txn_id"],
+                    )
+                ).strip(),
+                "description": ap_audit.pick_transaction_vendor_text(row),
+                "amount": amount,
+                "balance": balance,
+                "account": str(ap_audit.pick_value(row, ["account", "account_name", "source_account", "card", "source"])).strip(),
+                "memo": str(ap_audit.pick_value(row, ["memo", "note", "notes", "details", "extended description", "extended_description"])).strip(),
+                "transaction_type": str(ap_audit.pick_value(row, ["transaction_type", "transaction type", "type", "entry_type"])).strip(),
+                "source_row": row,
+            }
+        )
+    return normalized
+
+
+def latest_balance_row(bank_rows: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    candidates = [row for row in bank_rows if row.get("balance") is not None]
+    if not candidates:
+        return None
+    candidates.sort(
+        key=lambda row: (
+            row.get("date") or date.min,
+            int(row.get("row_index", 0)),
+        ),
+        reverse=True,
+    )
+    return candidates[0]
+
+
+def build_bank_snapshot(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    latest_path = latest_file_path(root)
+    raw_rows = latest_raw_transaction_rows(latest_path)
+    if not raw_rows:
+        return {
+            "available": False,
+            "message": "Upload a recent bank export to show current cash and posted expenses.",
+            "uploaded_at": metadata.get("uploaded_at", ""),
+            "recent_outflows": [],
+        }
+
+    bank_rows = normalize_bank_activity_rows(raw_rows)
+    current_row = latest_balance_row(bank_rows)
+    recent_outflows = [
+        row for row in bank_rows
+        if row.get("amount") is not None and float(row["amount"]) < 0
+    ]
+    recent_outflows.sort(
+        key=lambda row: (
+            row.get("date") or date.min,
+            int(row.get("row_index", 0)),
+        ),
+        reverse=True,
+    )
+    return {
+        "available": current_row is not None,
+        "message": "" if current_row is not None else "The latest bank export does not contain a usable balance field.",
+        "current_cash": float(current_row["balance"]) if current_row is not None else None,
+        "as_of_date": current_row.get("date") if current_row is not None else None,
+        "uploaded_at": metadata.get("uploaded_at", ""),
+        "current_reference": current_row.get("reference", "") if current_row is not None else "",
+        "recent_outflows": recent_outflows[:8],
+        "row_count": len(bank_rows),
+    }
+
+
+def build_bills_snapshot(root: Path, rules: Dict[str, Any], systems: Dict[str, Any], anchor_date: Optional[date]) -> Dict[str, Any]:
+    clickup_token = os.getenv("CLICKUP_API_TOKEN", "").strip()
+    clickup_list_id = os.getenv("CLICKUP_LIST_ID", "").strip()
+    clickup_view_id = os.getenv("CLICKUP_VIEW_ID", "").strip()
+    if not clickup_token or not (clickup_list_id or clickup_view_id):
+        return {
+            "available": False,
+            "message": "Connect ClickUp AP to show upcoming bills and forecast cash impact.",
+            "items": [],
+            "systems": systems,
+        }
+
+    as_of_date = anchor_date or date.today()
+    try:
+        task_rows = ap_audit.fetch_clickup_tasks(clickup_token, clickup_list_id or None, clickup_view_id or None)
+        tasks = ap_audit.normalize_tasks(task_rows, rules)
+    except Exception as exc:
+        return {
+            "available": False,
+            "message": f"ClickUp AP could not be loaded: {exc}",
+            "items": [],
+            "systems": systems,
+        }
+
+    items: List[Dict[str, Any]] = []
+    for task in tasks:
+        due_anchor = ap_audit.determine_due_anchor(task)
+        remaining_balance = task.remaining_balance or round(max(task.amount_due - task.amount_paid, 0.0), 2)
+        status_key = ap_audit.normalize_key(task.ap_state or task.status)
+        if remaining_balance <= 0.01 or not due_anchor:
+            continue
+        if status_key in {"paid", "closed", "removed no longer due", "removed no longer due"}:
+            continue
+        delta_days = (due_anchor - as_of_date).days
+        overdue = delta_days < 0 or "overdue" in status_key
+        level = "OVERDUE" if overdue else ap_audit.warning_level(
+            delta_days,
+            amount_due=task.amount_due,
+            material_amount=rules.get("material_warning_amount", ap_audit.MATERIAL_WARNING_AMOUNT),
+        )
+        items.append(
+            {
+                "task_id": task.task_id,
+                "vendor": task.vendor_name,
+                "remaining_balance": round(remaining_balance, 2),
+                "due_date": due_anchor,
+                "ap_state": task.ap_state or task.status,
+                "priority": task.cashflow_priority or "Medium",
+                "level": level,
+                "days_until_due": delta_days,
+            }
+        )
+
+    items.sort(
+        key=lambda item: (
+            0 if item["level"] == "OVERDUE" else 1,
+            item["due_date"],
+            -item["remaining_balance"],
+        )
+    )
+    due_in_14_days = round(
+        sum(item["remaining_balance"] for item in items if 0 <= item["days_until_due"] <= 14),
+        2,
+    )
+    overdue_total = round(
+        sum(item["remaining_balance"] for item in items if item["level"] == "OVERDUE"),
+        2,
+    )
+    return {
+        "available": True,
+        "message": "",
+        "items": items,
+        "due_in_14_days": due_in_14_days,
+        "overdue_total": overdue_total,
+        "overdue_count": sum(1 for item in items if item["level"] == "OVERDUE"),
+        "as_of_date": as_of_date,
+        "systems": systems,
+    }
+
+
+def build_forecast_snapshot(current_cash: Optional[float], bills_snapshot: Dict[str, Any], anchor_date: Optional[date]) -> Dict[str, Any]:
+    if current_cash is None:
+        return {"available": False, "message": "Current cash is unavailable, so the forecast is hidden.", "points": []}
+    if not bills_snapshot.get("available"):
+        return {"available": False, "message": "Upcoming bills are unavailable, so the forecast is hidden.", "points": []}
+
+    as_of_date = anchor_date or bills_snapshot.get("as_of_date") or date.today()
+    points = [
+        {
+            "label": "Today",
+            "date": as_of_date,
+            "balance": round(current_cash, 2),
+        }
+    ]
+    running_balance = float(current_cash)
+    low_point = {"date": as_of_date, "balance": round(current_cash, 2)}
+    for item in bills_snapshot.get("items", []):
+        if item["due_date"] > as_of_date + timedelta(days=30):
+            continue
+        running_balance = round(running_balance - float(item["remaining_balance"]), 2)
+        point = {
+            "label": item["vendor"],
+            "date": item["due_date"],
+            "balance": running_balance,
+        }
+        points.append(point)
+        if point["balance"] < low_point["balance"]:
+            low_point = {"date": point["date"], "balance": point["balance"]}
+    return {
+        "available": True,
+        "message": "",
+        "points": points,
+        "low_point": low_point,
+    }
+
+
+def build_finance_page_snapshot(root: Path, metadata: Dict[str, Any]) -> Dict[str, Any]:
+    rules = runtime_rules(root)
+    systems = build_connected_systems(root, rules)
+    bank = build_bank_snapshot(root, metadata)
+    bills = build_bills_snapshot(root, rules, systems, bank.get("as_of_date"))
+    forecast = build_forecast_snapshot(bank.get("current_cash"), bills, bank.get("as_of_date"))
+    return {
+        "bank": bank,
+        "bills": bills,
+        "forecast": forecast,
+        "systems": systems,
+    }
 
 
 def load_normalized_transactions(path: Path, root: Path) -> List[ap_audit.Transaction]:
@@ -2460,6 +2940,14 @@ def _sales_recent_deals_markup(snapshot: Dict[str, Any]) -> str:
         missing_fields = deal.get("missingFields", [])
         missing_text = ", ".join(str(field) for field in missing_fields) if missing_fields else "No critical gaps detected."
         next_step = str(deal.get("nextStep") or "No next step")
+        primary_action = str(deal.get("primaryNextAction") or next_step or "Review deal and define the next move.")
+        action_reason = str(deal.get("actionReason") or "No action rationale is available yet.")
+        blocker = deal.get("blockerState", {}) if isinstance(deal.get("blockerState"), dict) else {}
+        package_state = deal.get("packageState", {}) if isinstance(deal.get("packageState"), dict) else {}
+        freshness = deal.get("packageFreshness", {}) if isinstance(deal.get("packageFreshness"), dict) else {}
+        source_labels = deal.get("sourceOfTruthLabels", {}) if isinstance(deal.get("sourceOfTruthLabels"), dict) else {}
+        blocker_details = blocker.get("details", []) if isinstance(blocker.get("details"), list) else []
+        blocker_text = ", ".join(str(item) for item in blocker_details) if blocker_details else str(blocker.get("reason") or "No blocker")
         link = str(deal.get("url") or "")
         title = html.escape(str(deal.get("name", "Unnamed deal")))
         title_markup = f"<a href=\"{html.escape(link, quote=True)}\">{title}</a>" if link else title
@@ -2471,9 +2959,13 @@ def _sales_recent_deals_markup(snapshot: Dict[str, Any]) -> str:
                 <p class="muted">{html.escape(str(deal.get('company', 'No company')))} · {html.escape(str(deal.get('contact', 'No contact')))}</p>
                 <p>{_sales_badge(str(deal.get('stageStatus', 'open')).title())} {_format_sales_money(deal.get('amount'))} · {html.escape(str(deal.get('stage', 'Unknown stage')))}</p>
                 <p><strong>Owner:</strong> {html.escape(str(deal.get('owner', 'Unassigned')))}</p>
-                <p><strong>Next step:</strong> {html.escape(next_step)}</p>
+                <p><strong>Primary action:</strong> {html.escape(primary_action)}</p>
+                <p><strong>Why now:</strong> {html.escape(action_reason)}</p>
+                <p><strong>Package state:</strong> {_sales_badge(str(package_state.get('label', 'Unknown')))} {html.escape(str(package_state.get('reason', '')))}</p>
+                <p><strong>Blocker state:</strong> {_sales_badge(str(blocker.get('label', 'Unknown')))} {html.escape(blocker_text)}</p>
+                <p><strong>Source cues:</strong> HubSpot owns {html.escape(str(source_labels.get('hubspot', 'stage and record state')))}. agent owns {html.escape(str(source_labels.get('agent', 'operator overlay state')))}.</p>
                 <p><strong>Missing:</strong> {html.escape(missing_text)}</p>
-                <p class="hint">Updated {_format_sales_relative_timestamp(str(deal.get('updatedAt', '') or ''))}</p>
+                <p class="hint">HubSpot updated {_format_sales_relative_timestamp(str(deal.get('updatedAt', '') or ''))} · Freshness: {html.escape(str(freshness.get('label', 'Unknown freshness')))}</p>
               </article>
             """
         )
@@ -2511,8 +3003,8 @@ def _sales_writeback_markup(writeback: Optional[Dict[str, Any]]) -> str:
                 <p class="eyebrow">{html.escape(str(deal.get('stageStatus', 'open')).title())}</p>
                 <h3>{html.escape(str(deal.get('dealName', 'Unnamed deal')))}</h3>
                 <p class="muted">{html.escape(str(deal.get('companyName', 'No company')))} · {html.escape(str(deal.get('stage', 'Unknown stage')))}</p>
+                <p><strong>Rep action:</strong> {html.escape(str(deal.get('current', {}).get('nextStep') or 'Set or confirm the next action'))}</p>
                 <p><strong>Current service type:</strong> {html.escape(str(deal.get('current', {}).get('serviceType') or 'Blank'))}</p>
-                <p><strong>Current next step:</strong> {html.escape(str(deal.get('current', {}).get('nextStep') or 'Blank'))}</p>
                 <p><strong>Inference:</strong> {html.escape(str(deal.get('inference', {}).get('primaryOffer') or 'Unclassified'))} ({round(float(deal.get('inference', {}).get('confidence', 0.0) or 0.0) * 100)}%)</p>
                 <ul class="detail-list">{''.join(action_items) or "<li class='detail-item'>No actions were recorded.</li>"}</ul>
                 <p class="hint">Signals:</p>
@@ -2534,43 +3026,54 @@ def sales_dashboard_page(status_message: str, snapshot: Optional[Dict[str, Any]]
     pipeline = snapshot.get("pipeline", {})
     stage_drift = snapshot.get("stageDrift", {})
     autonomy = snapshot.get("autonomy", {})
+    recent_deals = [deal for deal in snapshot.get("recentDeals", []) if isinstance(deal, dict)]
+    ready_to_send = sum(1 for deal in recent_deals if str((deal.get("packageState") or {}).get("status", "")) == "attached")
+    blocked_deals = sum(1 for deal in recent_deals if str((deal.get("blockerState") or {}).get("status", "")) == "blocked")
+    review_deals = sum(1 for deal in recent_deals if bool(deal.get("reviewNeeded")))
     body = f"""
       {sales_nav()}
       <div class="grid section-gap">
-        {render_stat_card("Open pipeline", str(int(summary.get("openDeals", 0) or 0)), f"{_format_sales_money(summary.get('openAmount'))} in current open value")}
-        {render_stat_card("Unclassified deals", str(int(summary.get("unclassifiedDeals", 0) or 0)), "Need confident service or software mapping.")}
+        {render_stat_card("My open deals", str(int(summary.get("openDeals", 0) or 0)), f"{_format_sales_money(summary.get('openAmount'))} in current open value")}
+        {render_stat_card("Ready to send", str(ready_to_send), "Deals whose current package looks ready for internal review or send.")}
+        {render_stat_card("Blocked deals", str(blocked_deals), "Deals that cannot move cleanly because source context is missing.")}
+        {render_stat_card("Needs review", str(review_deals), "Deals where the operator layer is intentionally not confident enough to act automatically.")}
         {render_stat_card("Missing next step", str(int(summary.get("openDealsMissingNextStep", 0) or 0)), "Open or nurture deals that still need follow-up guidance.")}
-        {render_stat_card("Multi-offer signals", str(int(summary.get("multiOfferCandidates", 0) or 0)), "Candidates for second linked deals.")}
-        {render_stat_card("Schema model", str(int(schema.get("properties", {}).get("deals", {}).get("customCount", 0) or 0) + int(schema.get("properties", {}).get("companies", {}).get("customCount", 0) or 0) + int(schema.get("properties", {}).get("contacts", {}).get("customCount", 0) or 0)), "Custom properties across commercial objects.")}
       </div>
       <div class="grid section-gap">
         <section class="card">
-          <h2 class="section-title">What Is Happening</h2>
+          <h2 class="section-title">Control Room</h2>
           <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("happening", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
         </section>
         <section class="card">
-          <h2 class="section-title">What Is Broken</h2>
+          <h2 class="section-title">Fix Queue</h2>
           <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("broken", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
         </section>
         <section class="card">
-          <h2 class="section-title">What Should Happen Next</h2>
+          <h2 class="section-title">What To Do Next</h2>
           <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("next", [])) or "<p class='hint'>No next directives yet.</p>"}</div>
         </section>
       </div>
       <div class="grid section-gap">
         <section class="card">
-          <h2 class="section-title">Live Pipeline</h2>
+          <h2 class="section-title">Working Deals</h2>
           <p class="muted">Portal {html.escape(str(snapshot.get('portalId', '') or 'Unknown'))} · {html.escape(str(pipeline.get('label', 'HubSpot pipeline')))} / {html.escape(str(pipeline.get('id', '')))}</p>
-          <p class="hint">{int(pipeline.get('liveStageCount', 0) or 0)} live stages · {int(pipeline.get('targetStageCount', 0) or 0)} target stages</p>
+          <p class="hint">{int(pipeline.get('liveStageCount', 0) or 0)} live stages · {int(pipeline.get('targetStageCount', 0) or 0)} target stages · HubSpot is the source of truth for stage and next step.</p>
           <div class="report-list section-gap">{_sales_stage_markup(snapshot)}</div>
         </section>
         <section class="card">
-          <h2 class="section-title">Object Definitions</h2>
-          <p class="muted">Current commercial truth across HubSpot, decks, audits, and communications.</p>
+          <h2 class="section-title">Rules & Definitions</h2>
+          <p class="muted">Commercial object rules remain visible, but this view is secondary to the rep workflow.</p>
           <div class="report-list section-gap">{_sales_object_definition_markup(snapshot)}</div>
         </section>
       </div>
       <div class="grid section-gap">
+        <section class="card">
+          <h2 class="section-title">Trust Cues</h2>
+          <p class="muted">HubSpot owns record state. agent owns operator interpretation and package/readiness overlays.</p>
+          <p><strong>HubSpot fields:</strong> stage, owner, company/contact associations, next step</p>
+          <p><strong>agent fields:</strong> primary action framing, blocker framing, package-state interpretation</p>
+          <p class="hint">If confidence is below threshold, this surface should tell the rep to review instead of pretending certainty.</p>
+        </section>
         <section class="card">
           <h2 class="section-title">Autonomy Policy</h2>
           <p class="muted">{html.escape(str(autonomy.get('autonomy_mode', 'high_confidence_only')).replace('_', ' '))}</p>
@@ -2599,8 +3102,8 @@ def sales_dashboard_page(status_message: str, snapshot: Optional[Dict[str, Any]]
         {_sales_writeback_markup(writeback)}
       </div>
       <div class="card section-gap">
-        <h2 class="section-title">Recent Deals</h2>
-        <p class="muted">Latest commercial records from the live pipeline with the current missing-field audit.</p>
+        <h2 class="section-title">Working Deal Board</h2>
+        <p class="muted">Rep-first deal list with one primary action, one blocker state, one package state, and visible freshness/trust cues.</p>
         <div class="report-list section-gap">{_sales_recent_deals_markup(snapshot)}</div>
       </div>
       <div class="card section-gap">
@@ -2613,8 +3116,8 @@ def sales_dashboard_page(status_message: str, snapshot: Optional[Dict[str, Any]]
     return page_shell(
         title="Anata Sales OS",
         eyebrow="Sales OS",
-        heading="Sales OS",
-        intro="Commercial operator surface for the live HubSpot pipeline, object definitions, and the first autonomous write-back layer.",
+        heading="Sales Control Room",
+        intro="Rep-first commercial operator surface for the live HubSpot pipeline, primary next actions, blocker states, and package-readiness overlays.",
         status_block=status_block,
         body=body,
     )
@@ -2657,6 +3160,9 @@ def _sales_deck_candidate_markup(candidates: List[Dict[str, Any]]) -> str:
         title_markup = f"<a href=\"{html.escape(link, quote=True)}\">{title}</a>" if link else title
         missing_fields = deal.get("missingFields", [])
         missing_text = ", ".join(str(field) for field in missing_fields) if missing_fields else "No critical source gaps detected."
+        package_state = deal.get("packageState", {}) if isinstance(deal.get("packageState"), dict) else {}
+        freshness = deal.get("packageFreshness", {}) if isinstance(deal.get("packageFreshness"), dict) else {}
+        blocker = deal.get("blockerState", {}) if isinstance(deal.get("blockerState"), dict) else {}
         cards.append(
             f"""
               <article class="feedback-item">
@@ -2665,9 +3171,12 @@ def _sales_deck_candidate_markup(candidates: List[Dict[str, Any]]) -> str:
                 <p>{_sales_badge(str(deal.get('deckStatus', 'Monitor')))} {html.escape(str(deal.get('stage', 'Unknown stage')))}</p>
                 <p class="muted">{html.escape(str(deal.get('company', 'No company')))} - {html.escape(str(deal.get('contact', 'No contact')))}</p>
                 <p><strong>Owner:</strong> {html.escape(str(deal.get('owner', 'Unassigned')))}</p>
-                <p><strong>Next step:</strong> {html.escape(str(deal.get('nextStep') or 'No next step'))}</p>
+                <p><strong>Primary action:</strong> {html.escape(str(deal.get('primaryNextAction') or deal.get('nextStep') or 'Review package path'))}</p>
                 <p><strong>Deck read:</strong> {html.escape(str(deal.get('deckStatusNote', 'Review current HubSpot state.')))}</p>
+                <p><strong>Commercial package:</strong> {_sales_badge(str(package_state.get('label', 'Unknown')))} {html.escape(str(package_state.get('reason', '')))}</p>
+                <p><strong>Blocker state:</strong> {_sales_badge(str(blocker.get('label', 'Unknown')))} {html.escape(str(blocker.get('reason', 'No blocker detail')))}</p>
                 <p><strong>Missing:</strong> {html.escape(missing_text)}</p>
+                <p class="hint">Freshness: {html.escape(str(freshness.get('label', 'Unknown freshness')))} · HubSpot is truth for record state, agent is truth for package interpretation.</p>
               </article>
             """
         )
@@ -2700,47 +3209,48 @@ def sales_decks_page(status_message: str, snapshot: Optional[Dict[str, Any]] = N
     body = f"""
       {sales_nav()}
       <div class="grid section-gap">
-        {render_stat_card("Deck route", "Live", "/admin/sales-decks and /admin/sales/decks/ render this surface.")}
+        {render_stat_card("Commercial Package", "Live", "/admin/sales-decks and /admin/sales/decks/ now act as the package workflow surface.")}
         {render_stat_card("Ready candidates", str(ready_count), "Recent deals with source structure ready for deck workflow.")}
         {render_stat_card("Blocked candidates", str(blocked_count), "Deals missing source data required before deck work.")}
         {render_stat_card("Need next step", str(needs_next_step_count), "Deals that need a commercial action before deck work.")}
       </div>
       <div class="grid section-gap">
         <section class="card">
-          <h2 class="section-title">What Is Happening</h2>
+          <h2 class="section-title">Control Room</h2>
           <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("happening", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
         </section>
         <section class="card">
-          <h2 class="section-title">What Is Broken</h2>
+          <h2 class="section-title">Fix Queue</h2>
           <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("broken", [])) or "<p class='hint'>No live directives yet.</p>"}</div>
         </section>
         <section class="card">
-          <h2 class="section-title">What Should Happen Next</h2>
+          <h2 class="section-title">What To Do Next</h2>
           <div class="detail-list">{''.join(f"<li class='detail-item'>{html.escape(str(item))}</li>" for item in snapshot.get("directives", {}).get("next", [])) or "<p class='hint'>No next directives yet.</p>"}</div>
         </section>
       </div>
       <div class="grid section-gap">
         <section class="card">
-          <h2 class="section-title">Deck Rules</h2>
-          <p class="muted">Deck artifacts are tracked as agent-owned live links and must stay attached to clean HubSpot deal records.</p>
+          <h2 class="section-title">Commercial Package Rules</h2>
+          <p class="muted">Deck artifacts are still agent-owned live links, but this surface should help the rep understand package readiness through the deal.</p>
           <ul class="detail-list">{_sales_deck_rules_markup(snapshot)}</ul>
         </section>
         <section class="card">
-          <h2 class="section-title">Generation Status</h2>
-          <p class="muted">Creation remains guarded until deck artifact persistence and deal sync are wired.</p>
+          <h2 class="section-title">Trust Cues</h2>
+          <p class="muted">HubSpot owns the record. agent owns package interpretation and readiness overlays.</p>
+          <p class="hint">Creation remains guarded until deck artifact persistence and deal sync are wired.</p>
           <p><a href="/admin/sales/decks/create">Open guarded create route</a></p>
         </section>
       </div>
       <div class="card section-gap">
-        <h2 class="section-title">Deck Status By Deal</h2>
+        <h2 class="section-title">Commercial Package By Deal</h2>
         <div class="report-list section-gap">{_sales_deck_candidate_markup(candidates)}</div>
       </div>
     """
     return page_shell(
         title="Anata Sales OS - Sales Decks",
         eyebrow="Sales OS",
-        heading="Sales Decks",
-        intro="Operator surface for deck generation readiness, source deal blockers, and live artifact routing.",
+        heading="Commercial Package",
+        intro="Rep-first package surface for deck readiness, deal blockers, and trust cues around what is ready to share.",
         status_block=status_block,
         body=body,
     )
@@ -3279,11 +3789,8 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
         if missing_admin_env and not unauthenticated_local_bypass_enabled():
             return auth_configuration_error_response(start_response, missing_admin_env)
         if request_is_admin_authenticated(environ):
-            rules = runtime_rules(root)
-            systems = build_connected_systems(root, rules)
-            archive_analysis = build_archive_analysis(root, metadata, systems)
-            live_audit = run_live_ap_audit(root, metadata, systems)
-            body = upload_page(status_message, metadata, render_analysis_html(archive_analysis, live_audit))
+            finance_snapshot = build_finance_page_snapshot(root, metadata)
+            body = upload_page(status_message, metadata, finance_snapshot)
         else:
             body = login_page(status_message)
         return text_response(start_response, "200 OK", body, "text/html; charset=utf-8")

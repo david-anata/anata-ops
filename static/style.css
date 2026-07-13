@@ -999,6 +999,11 @@ button.ghost {
   color: var(--anata-sky-deep);
 }
 
+.badge-critical {
+  background: rgba(197, 49, 49, 0.12);
+  color: #b42318;
+}
+
 .badge-warn {
   background: rgba(191, 168, 137, 0.2);
   color: #8c704e;
@@ -1029,6 +1034,107 @@ button.ghost {
 
 .ops-nav a:hover {
   background: var(--anata-sand-soft);
+}
+
+.finance-status-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.finance-source-note {
+  color: var(--anata-muted);
+  font-size: 13px;
+}
+
+.finance-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.finance-metric-card {
+  display: grid;
+  gap: 8px;
+}
+
+.finance-metric-card span {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--anata-muted);
+}
+
+.finance-metric-card strong {
+  font-size: 30px;
+  line-height: 1.05;
+}
+
+.finance-metric-card small {
+  color: var(--anata-muted);
+}
+
+.finance-table-wrap {
+  margin-top: 14px;
+}
+
+.empty-cell {
+  color: var(--anata-muted);
+}
+
+.forecast-wrap {
+  display: grid;
+  gap: 14px;
+}
+
+.forecast-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.forecast-grid-line {
+  fill: none;
+  stroke: rgba(29, 45, 68, 0.12);
+  stroke-width: 1;
+}
+
+.forecast-line {
+  fill: none;
+  stroke: var(--anata-sky-deep);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.forecast-chart circle {
+  fill: var(--anata-paper);
+  stroke: var(--anata-sky-deep);
+  stroke-width: 2;
+}
+
+.forecast-labels {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.forecast-labels div {
+  display: grid;
+  gap: 4px;
+}
+
+.forecast-labels span {
+  font-size: 12px;
+  color: var(--anata-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.forecast-labels strong {
+  font-size: 16px;
 }
 
 .stat-card {
@@ -1252,6 +1358,10 @@ button.is-active {
   .system-row {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .finance-metric-grid {
+    grid-template-columns: 1fr;
   }
 
   .system-meta {
