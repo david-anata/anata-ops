@@ -1474,6 +1474,32 @@ def build_finance_page_snapshot(root: Path, metadata: Dict[str, Any]) -> Dict[st
     }
 
 
+def finance_snapshot_fallback(metadata: Dict[str, Any], reason: str = "") -> Dict[str, Any]:
+    message = reason or "Finance data could not be loaded right now."
+    return {
+        "bank": {
+            "available": False,
+            "message": message,
+            "uploaded_at": metadata.get("uploaded_at", ""),
+            "recent_outflows": [],
+        },
+        "bills": {
+            "available": False,
+            "message": message,
+            "items": [],
+            "overdue_count": 0,
+            "overdue_total": 0.0,
+            "due_in_14_days": 0.0,
+        },
+        "forecast": {
+            "available": False,
+            "message": message,
+            "points": [],
+        },
+        "systems": {},
+    }
+
+
 def load_normalized_transactions(path: Path, root: Path) -> List[ap_audit.Transaction]:
     if not path.exists():
         return []
@@ -3796,7 +3822,14 @@ def app(environ: Dict[str, Any], start_response: Any) -> Iterable[bytes]:
         if missing_admin_env and not unauthenticated_local_bypass_enabled():
             return auth_configuration_error_response(start_response, missing_admin_env)
         if request_is_admin_authenticated(environ):
-            finance_snapshot = build_finance_page_snapshot(root, metadata)
+            try:
+                finance_snapshot = build_finance_page_snapshot(root, metadata)
+            except Exception as exc:
+                LOGGER.exception("Finance page snapshot failed; rendering degraded finance page.")
+                finance_snapshot = finance_snapshot_fallback(
+                    metadata,
+                    "Finance data is temporarily unavailable while source connections recover.",
+                )
             body = upload_page(status_message, metadata, finance_snapshot)
         else:
             body = login_page(status_message)

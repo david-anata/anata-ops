@@ -152,3 +152,19 @@ class FinanceDashboardTests(unittest.TestCase):
         self.assertIn("Trust Panel", rendered)
         self.assertIn("$12,500.00", rendered)
         self.assertIn("Rent", rendered)
+
+    def test_root_page_degrades_gracefully_when_finance_snapshot_fails(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            env = {"AP_UPLOAD_STORAGE_DIR": str(Path(tmpdir))}
+            with mock.patch.dict(os.environ, env, clear=False), mock.patch.object(
+                ap_upload_inbox,
+                "build_finance_page_snapshot",
+                side_effect=RuntimeError("finance page exploded"),
+            ):
+                status, headers, body = call_app("/", local_bypass=True)
+
+        self.assertEqual(status, "200 OK")
+        rendered = body.decode("utf-8")
+        self.assertIn("Cash And Bills", rendered)
+        self.assertIn("Finance data is temporarily unavailable while source connections recover.", rendered)
+        self.assertIn("Cash Unavailable", rendered)
